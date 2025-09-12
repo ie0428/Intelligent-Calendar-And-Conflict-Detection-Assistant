@@ -1,8 +1,8 @@
 package com.ai.intelligentcalendarandconflictdetectionassistant.services;
 
 
-import com.xs.ai.data.*;
-import com.xs.ai.services.BookingTools.BookingDetails;
+import com.ai.intelligentcalendarandconflictdetectionassistant.data.*;
+import com.ai.intelligentcalendarandconflictdetectionassistant.services.BookingTools.BookingDetails;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
