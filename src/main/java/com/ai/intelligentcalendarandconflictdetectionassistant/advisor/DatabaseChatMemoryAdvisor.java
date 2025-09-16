@@ -1,0 +1,260 @@
+package com.ai.intelligentcalendarandconflictdetectionassistant.advisor;
+
+import com.ai.intelligentcalendarandconflictdetectionassistant.pojo.Conversation;
+import com.ai.intelligentcalendarandconflictdetectionassistant.services.ConversationService;
+import org.springframework.ai.chat.client.AdvisedRequest;
+import org.springframework.ai.chat.client.RequestResponseAdvisor;
+import org.springframework.ai.chat.model.ChatResponse;
+import reactor.core.publisher.Flux;
+
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+
+public class DatabaseChatMemoryAdvisor implements RequestResponseAdvisor {
+
+    private final ConversationService conversationService;
+    private final String memoryPromptTemplate;
+    private static final String SESSION_ID_KEY = "sessionId";
+    private static final String USER_ID_KEY = "userId";
+    private static final int MAX_HISTORY_COUNT = 10; // 最大历史记录数
+
+    // 用于存储每个会话的AdvisedRequest对象
+    private final Map<String, AdvisedRequest> requestCache = new ConcurrentHashMap<>();
+    // 用于存储每个会话的AI响应片段
+    private final Map<String, StringBuilder> responseCache = new ConcurrentHashMap<>();
+
+    public DatabaseChatMemoryAdvisor(ConversationService conversationService) {
+        this(conversationService, "\nUse the conversation memory from the MEMORY section to provide accurate answers.\n\n---------------------\nMEMORY:\n{memory}\n---------------------\n\n");
+    }
+
+    public DatabaseChatMemoryAdvisor(ConversationService conversationService, String memoryPromptTemplate) {
+        this.conversationService = conversationService;
+        this.memoryPromptTemplate = memoryPromptTemplate;
+    }
+
+    @Override
+    public ChatResponse adviseResponse(ChatResponse response, Map<String, Object> context) {
+        System.out.println("DatabaseChatMemoryAdvisor.adviseResponse 被调用");
+
+        try {
+            // 从缓存中获取 AdvisedRequest 对象
+            String sessionId = getSessionIdFromContext(context);
+            AdvisedRequest advisedRequest = requestCache.get(sessionId);
+
+            if (advisedRequest == null) {
+                System.out.println("advisedRequest 为 null");
+                return response;
+            }
+
+            // 获取用户消息和AI响应
+            String userMessage = advisedRequest.userText();
+            String aiResponse = response.getResult().getOutput().getContent();
+
+            System.out.println("准备保存对话记录 - 用户消息: " + userMessage + ", AI响应: " + aiResponse);
+
+            // 获取会话参数
+            Map<String, Object> advisorParams = advisedRequest.advisorParams();
+            Long userId = (Long) advisorParams.getOrDefault(USER_ID_KEY, 1L);
+
+            System.out.println("保存对话记录使用的参数 - sessionId: " + sessionId + ", userId: " + userId);
+
+            // 保存对话记录
+            Conversation savedConversation = conversationService.saveConversation(
+                    userId,
+                    sessionId,
+                    userMessage,
+                    aiResponse,
+                    "", // intent 可以从AI响应中提取或通过其他方式识别
+                    "{}", // entities 可以是JSON格式的实体信息
+                    true // successful 默认为true，可以根据实际处理结果调整
+            );
+
+            System.out.println("对话记录保存成功，ID: " + savedConversation.getId());
+
+            // 清理缓存
+            requestCache.remove(sessionId);
+
+        } catch (Exception e) {
+            // 记录异常但不影响主流程
+            System.err.println("保存对话记录时出错: ");
+            e.printStackTrace();
+        }
+
+        System.out.println("DatabaseChatMemoryAdvisor.adviseResponse 执行完成");
+        return response;
+    }
+
+    @Override
+    public Flux<ChatResponse> adviseResponse(Flux<ChatResponse> fluxResponse, Map<String, Object> context) {
+        System.out.println("DatabaseChatMemoryAdvisor.adviseResponse(Flux) 被调用");
+
+        return Flux.defer(() -> {
+            String sessionId = getSessionIdFromContext(context);
+
+            // 初始化响应缓存
+            responseCache.put(sessionId, new StringBuilder());
+
+            return fluxResponse
+                    .doOnNext(response -> {
+                        try {
+                            // 累积AI响应片段
+                            String aiResponseFragment = response.getResult().getOutput().getContent();
+                            if (aiResponseFragment != null && !aiResponseFragment.isEmpty()) {
+                                responseCache.get(sessionId).append(aiResponseFragment);
+                            }
+                        } catch (Exception e) {
+                            System.err.println("累积AI响应时出错: ");
+                            e.printStackTrace();
+                        }
+                    })
+                    .doOnComplete(() -> {
+                        try {
+                            // 流完成时保存完整的对话记录
+                            StringBuilder responseBuilder = responseCache.get(sessionId);
+                            if (responseBuilder != null && responseBuilder.length() > 0) {
+                                String completeAiResponse = responseBuilder.toString();
+
+                                // 从缓存中获取 AdvisedRequest 对象
+                                AdvisedRequest advisedRequest = requestCache.get(sessionId);
+
+                                if (advisedRequest != null) {
+                                    // 获取用户消息
+                                    String userMessage = advisedRequest.userText();
+
+                                    System.out.println("准备保存完整对话记录 - 用户消息: " + userMessage +
+                                            ", 完整AI响应: " + completeAiResponse);
+
+                                    // 获取会话参数
+                                    Map<String, Object> advisorParams = advisedRequest.advisorParams();
+                                    Long userId = (Long) advisorParams.getOrDefault(USER_ID_KEY, 1L);
+
+                                    System.out.println("保存完整对话记录使用的参数 - sessionId: " + sessionId +
+                                            ", userId: " + userId);
+
+                                    // 保存完整的对话记录
+                                    Conversation savedConversation = conversationService.saveConversation(
+                                            userId,
+                                            sessionId,
+                                            userMessage,
+                                            completeAiResponse,
+                                            "", // intent 可以从AI响应中提取或通过其他方式识别
+                                            "{}", // entities 可以是JSON格式的实体信息
+                                            true // successful 默认为true，可以根据实际处理结果调整
+                                    );
+
+                                    System.out.println("完整对话记录保存成功，ID: " + savedConversation.getId());
+                                }
+                            }
+                        } catch (Exception e) {
+                            System.err.println("保存完整对话记录时出错: ");
+                            e.printStackTrace();
+                        } finally {
+                            // 清理缓存
+                            responseCache.remove(sessionId);
+                            requestCache.remove(sessionId);
+                            System.out.println("DatabaseChatMemoryAdvisor.adviseResponse(Flux) 执行完成");
+                        }
+                    })
+                    .doOnError(error -> {
+                        // 发生错误时清理缓存
+                        responseCache.remove(sessionId);
+                        requestCache.remove(sessionId);
+                        System.err.println("DatabaseChatMemoryAdvisor.adviseResponse(Flux) 发生错误: " + error.getMessage());
+                    });
+        });
+    }
+
+    @Override
+    public AdvisedRequest adviseRequest(AdvisedRequest request, Map<String, Object> context) {
+        try {
+            // 获取会话参数
+            Map<String, Object> advisorParams = request.advisorParams();
+            String sessionId = (String) advisorParams.getOrDefault(SESSION_ID_KEY, UUID.randomUUID().toString());
+            Long userId = (Long) advisorParams.getOrDefault(USER_ID_KEY, 1L);
+
+            System.out.println("DatabaseChatMemoryAdvisor - sessionId: " + sessionId + ", userId: " + userId);
+
+            // 将AdvisedRequest存储到缓存中
+            requestCache.put(sessionId, request);
+
+            // 从数据库获取历史对话记录
+            List<Conversation> conversationHistory = conversationService.getConversationHistory(sessionId);
+
+            System.out.println("从数据库获取到 " + conversationHistory.size() + " 条历史记录");
+
+            // 如果getConversationHistory返回的记录过多，限制数量
+            if (conversationHistory.size() > MAX_HISTORY_COUNT) {
+                conversationHistory = conversationHistory.subList(0, MAX_HISTORY_COUNT);
+            }
+
+            // 构建内存格式的对话历史
+            String memoryContent = buildMemoryContent(conversationHistory);
+
+            System.out.println("构建的记忆内容: " + memoryContent);
+
+            // 构造系统提示词，包含对话记忆
+            String systemPromptWithMemory = request.systemText() +
+                    memoryPromptTemplate.replace("{memory}", memoryContent);
+
+            // 创建新的请求，包含内存增强的系统提示
+            return AdvisedRequest.from(request)
+                    .withSystemText(systemPromptWithMemory)
+                    .build();
+
+        } catch (Exception e) {
+            // 出现异常时，返回原始请求
+            e.printStackTrace();
+            return request;
+        }
+    }
+
+    /**
+     * 从context中提取sessionId
+     * @param context 上下文
+     * @return sessionId
+     */
+    private String getSessionIdFromContext(Map<String, Object> context) {
+        if (context == null) return null;
+
+        // 尝试从不同位置获取sessionId
+        Object sessionIdObj = context.get("sessionId");
+        if (sessionIdObj instanceof String) {
+            return (String) sessionIdObj;
+        }
+
+        // 尝试从request中获取
+        AdvisedRequest request = (AdvisedRequest) context.get("request");
+        if (request != null) {
+            Map<String, Object> advisorParams = request.advisorParams();
+            if (advisorParams != null) {
+                Object sessionId = advisorParams.get(SESSION_ID_KEY);
+                if (sessionId instanceof String) {
+                    return (String) sessionId;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * 构建内存内容格式
+     * @param conversationHistory 对话历史记录
+     * @return 格式化的内存内容字符串
+     */
+    private String buildMemoryContent(List<Conversation> conversationHistory) {
+        if (conversationHistory.isEmpty()) {
+            return "No previous conversation history.";
+        }
+
+        StringBuilder memoryBuilder = new StringBuilder();
+        // 按时间倒序排列，最新的在前面
+        for (int i = conversationHistory.size() - 1; i >= 0; i--) {
+            Conversation conversation = conversationHistory.get(i);
+            memoryBuilder.append("User: ").append(conversation.getUserMessage()).append("\n");
+            memoryBuilder.append("Assistant: ").append(conversation.getAiResponse()).append("\n\n");
+        }
+
+        return memoryBuilder.toString().trim();
+    }
+}

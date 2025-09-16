@@ -29,7 +29,7 @@ public class BookingTools {
 	}
 
 	@Bean
-	@Description("取消机票预定")
+	@Description("取消日程")
 	public Function<CancelBookingRequest, String> cancelBooking() {
 		return request -> {
 			flightBookingService.cancelBooking(request.bookingNumber(), request.name());
@@ -38,7 +38,7 @@ public class BookingTools {
 	}
 
 	@Bean
-	@Description("获取机票预定详细信息")
+	@Description("获取日程详细信息")
 	public Function<BookingDetailsRequest, BookingDetails> getBookingDetails() {
 		return request -> {
 			try {
@@ -55,7 +55,7 @@ public class BookingTools {
 	}
 
 	@Bean
-	@Description("修改机票预定日期")
+	@Description("修改日程的信息")
 	public Function<ChangeBookingDatesRequest, String> changeBooking() {
 		return request -> {
 			flightBookingService.changeBooking(request.bookingNumber(), request.name(), request.date(), request.from(),
@@ -66,6 +66,43 @@ public class BookingTools {
 
 	public record ChangeBookingDatesRequest(String bookingNumber, String name,String date, String from, String to) {
 	}
+
+
+	// 在 BookingTools 类中添加
+	public record CreateBookingRequest(String name, String date, String from, String to, String title) {
+		// 无参构造函数，用于向后兼容
+		public CreateBookingRequest(String name, String date, String from, String to) {
+			this(name, date, from, to, null);
+		}
+	}
+
+	// 更新 createBooking Bean 方法
+	@Bean
+	@Description("创建日程")
+	public Function<CreateBookingRequest, String> createBooking() {
+		return request -> {
+			try {
+				// 传递标题参数，如果没有提供则使用默认值
+				String title = request.title();
+				if (title == null || title.trim().isEmpty()) {
+					title = "会议: " + (request.from() != null ? request.from() : "未指定地点");
+				}
+
+				flightBookingService.createBooking(
+						request.name(),
+						request.date(),
+						request.from(),
+						request.to(),
+						title
+				);
+				return "日程创建成功";
+			} catch (Exception e) {
+				log.error("创建日程失败: ", e);
+				return "日程创建失败: " + e.getMessage();
+			}
+		};
+	}
+
 
 
 }
