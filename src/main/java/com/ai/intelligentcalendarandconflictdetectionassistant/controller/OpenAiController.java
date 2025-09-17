@@ -41,12 +41,19 @@ public class OpenAiController {
                         以下信息：用户的姓名，日程操作在哪一天
                         创建日程时必须得到会议开始和结束时间以及会议主题
                         在询问用户之前，请检查消息历史记录以获取此信息。
+                        
+                        重要提示：
+                        1. 每个日程都有一个唯一的数字ID，这是在创建日程时系统自动生成的（存储在数据库表中）
+                        2. 在执行取消或修改日程操作时，必须使用这个数字ID，而不是日程的状态或其他信息
+                        3. 当用户想要修改或取消日程时，请先使用findCalendarEvent函数获取该用户的所有日程
+                        4. 然后根据用户描述匹配相应的日程，获取其ID
+                        5. 最后使用获取到的ID执行相应的修改或取消操作
                         请讲中文。
                         今天的日期是 {current_date}.
                     """)
                 .defaultAdvisors(new loggingAdvisor())
                 .defaultAdvisors(new DatabaseChatMemoryAdvisor(conversationService))
-                .defaultFunctions("cancelBooking","getBookingDetails","createBooking","changeBooking")
+                .defaultFunctions("cancelBooking","getBookingDetails","createBooking","changeBooking","findCalendarEvent","getAllBookings")
                 .build();
     }
     @CrossOrigin

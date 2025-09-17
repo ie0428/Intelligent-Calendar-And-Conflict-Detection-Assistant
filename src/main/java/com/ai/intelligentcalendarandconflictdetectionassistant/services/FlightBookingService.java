@@ -30,8 +30,8 @@ public class FlightBookingService {
 				.collect(Collectors.toList());
 	}
 
-	// 根据事件ID和用户名查找日历事件
-	private CalendarEvent findCalendarEvent(Long eventId, String username) {
+	// 根据事件ID查找日历事件
+	public CalendarEvent findCalendarEvent(Long eventId, String username) {
 		CalendarEvent event = calendarEventMapper.findById(eventId);
 		if (event == null) {
 			throw new IllegalArgumentException("Calendar event not found");
@@ -45,6 +45,28 @@ public class FlightBookingService {
 		return event;
 	}
 
+	// 根据事件ID查找日历事件
+	public CalendarEvent findCalendarEventById(Long eventId) {
+		CalendarEvent event = calendarEventMapper.findById(eventId);
+		if (event == null) {
+			throw new IllegalArgumentException("Calendar event not found");
+		}
+		return event;
+	}
+
+	// 根据用户名查找该用户的所有日程
+	public List<BookingDetails> getBookingsByUsername(String username) {
+		User user = userMapper.findByUsername(username);
+		if (user == null) {
+			return List.of(); // 用户不存在，返回空列表
+		}
+
+		return calendarEventMapper.findByUserId(user.getId()).stream()
+				.map(this::toBookingDetails)
+				.collect(Collectors.toList());
+	}
+
+
 	// 根据事件ID和用户名查询事件详情
 	public BookingDetails getBookingDetails(String eventId, String username) {
 		var event = findCalendarEvent(Long.valueOf(eventId), username);
@@ -53,9 +75,11 @@ public class FlightBookingService {
 
 	// 更改日历事件
 	public void changeBooking(String eventId, String username, String newDate, String location, String description) {
-		var event = findCalendarEvent(Long.valueOf(eventId), username);
-		if (event.getStartTime().isBefore(LocalDateTime.now().plusDays(1))) {
-			throw new IllegalArgumentException("Event cannot be changed within 24 hours of the start date.");
+		CalendarEvent event;
+		if(username!=null&&!username.isEmpty()){
+			event = findCalendarEvent(Long.valueOf(eventId), username);
+		}else {
+			event = findCalendarEventById(Long.valueOf(eventId));
 		}
 
 		LocalDate newLocalDate = LocalDate.parse(newDate);
@@ -69,9 +93,11 @@ public class FlightBookingService {
 
 	// 取消日历事件
 	public void cancelBooking(String eventId, String username) {
-		var event = findCalendarEvent(Long.valueOf(eventId), username);
-		if (event.getStartTime().isBefore(LocalDateTime.now().plusDays(2))) {
-			throw new IllegalArgumentException("Event cannot be cancelled within 48 hours of the start date.");
+		CalendarEvent event;
+		if(username!=null&&!username.isEmpty()){
+			event = findCalendarEvent(Long.valueOf(eventId), username);
+		}else {
+			event = findCalendarEventById(Long.valueOf(eventId));
 		}
 		event.setStatus(CalendarEvent.Status.CANCELLED);
 		calendarEventMapper.update(event);

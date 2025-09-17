@@ -11,7 +11,9 @@ import org.springframework.context.annotation.Description;
 import org.springframework.core.NestedExceptionUtils;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Configuration
@@ -21,50 +23,81 @@ public class BookingTools {
 	private FlightBookingService flightBookingService;
 
 	@JsonInclude(Include.NON_NULL)
-	public record BookingDetails(String bookingNumber, String name, LocalDate date, BookingStatus bookingStatus,
+	public record BookingDetails(String eventId, String name, LocalDate date, BookingStatus bookingStatus,
 								 String from, String to, String bookingClass) {
 	}
 
-	public record CancelBookingRequest(String bookingNumber, String name) {
+	public record CancelBookingRequest(String eventId, String name) {
 	}
 
 	@Bean
 	@Description("取消日程")
 	public Function<CancelBookingRequest, String> cancelBooking() {
 		return request -> {
-			flightBookingService.cancelBooking(request.bookingNumber(), request.name());
+			flightBookingService.cancelBooking(request.eventId(), request.name());
 			return "";
 		};
 	}
+
+
+	public record FindCalendarEventRequest(String eventId, String name) {
+		// 添加默认构造函数支持只传name
+		public FindCalendarEventRequest(String name) {
+			this(null, name);
+		}
+	}
+
+	@Bean
+	@Description("查找用户日程")
+	public Function<FindCalendarEventRequest, List<BookingDetails>> findCalendarEvent() {
+		return request -> {
+			try {
+				if (request.eventId() != null && !request.eventId().isEmpty()) {
+					// 查询单个事件
+					BookingDetails details = flightBookingService.getBookingDetails(request.eventId(), request.name());
+					return List.of(details);
+				} else {
+					// 查询用户所有事件
+					return flightBookingService.getBookingsByUsername(request.name());
+				}
+			} catch (Exception e) {
+				log.warn("Find calendar event: {}", NestedExceptionUtils.getMostSpecificCause(e).getMessage());
+				return List.of();
+			}
+		};
+	}
+
+
+
 
 	@Bean
 	@Description("获取日程详细信息")
 	public Function<BookingDetailsRequest, BookingDetails> getBookingDetails() {
 		return request -> {
 			try {
-				return flightBookingService.getBookingDetails(request.bookingNumber(), request.name());
+				return flightBookingService.getBookingDetails(request.eventId(), request.name());
 			}
 			catch (Exception e) {
 				log.warn("Booking details: {}", NestedExceptionUtils.getMostSpecificCause(e).getMessage());
-				return new BookingDetails(request.bookingNumber(), request.name(), null, null, null, null, null);
+				return new BookingDetails(request.eventId(), request.name(), null, null, null, null, null);
 			}
 		};
 	}
 
-	public record BookingDetailsRequest(String bookingNumber, String name) {
+	public record BookingDetailsRequest(String eventId, String name) {
 	}
 
 	@Bean
 	@Description("修改日程的信息")
 	public Function<ChangeBookingDatesRequest, String> changeBooking() {
 		return request -> {
-			flightBookingService.changeBooking(request.bookingNumber(), request.name(), request.date(), request.from(),
+			flightBookingService.changeBooking(request.eventId(), request.name(), request.date(), request.from(),
 					request.to());
 			return "";
 		};
 	}
 
-	public record ChangeBookingDatesRequest(String bookingNumber, String name,String date, String from, String to) {
+	public record ChangeBookingDatesRequest(String eventId, String name,String date, String from, String to) {
 	}
 
 
@@ -103,6 +136,19 @@ public class BookingTools {
 		};
 	}
 
-
+	public record AllBookingsRequest() {
+	}
+	@Bean
+	@Description("获取所有日程")
+	public Function<AllBookingsRequest, List<BookingDetails>> getAllBookings() {
+		return request -> {
+			try {
+				return flightBookingService.getBookings();
+			} catch (Exception e) {
+				log.warn("获取所有日程失败: {}", NestedExceptionUtils.getMostSpecificCause(e).getMessage());
+				return List.of();
+			}
+		};
+	}
 
 }
