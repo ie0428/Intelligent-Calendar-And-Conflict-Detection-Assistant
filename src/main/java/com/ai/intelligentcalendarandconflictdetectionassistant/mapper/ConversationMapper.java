@@ -33,4 +33,7 @@ public interface ConversationMapper {
 
     @Select("SELECT * FROM conversations WHERE session_id = #{sessionId}")
     List<Conversation> findBySessionId(String sessionId);
+    
+    @Select("SELECT DISTINCT session_id FROM conversations WHERE user_id = #{userId}")
+    List<String> findDistinctSessionIdsByUserId(Long userId);
 }

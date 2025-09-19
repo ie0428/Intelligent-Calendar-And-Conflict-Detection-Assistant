@@ -17,4 +17,14 @@ public class User {
     private Boolean isActive;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+
+    public User(String username, String email, String password) {
+        this.username = username;
+        this.email = email;
+        this.passwordHash = password;
+    }
+
+    public User(){
+
+    }
 }

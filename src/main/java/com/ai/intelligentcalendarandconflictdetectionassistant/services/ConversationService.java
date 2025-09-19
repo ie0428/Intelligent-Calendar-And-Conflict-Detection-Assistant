@@ -96,5 +96,14 @@ public class ConversationService {
     public void deleteConversation(Long id) {
         conversationMapper.deleteById(id);
     }
+    
+    /**
+     * 获取用户的所有会话ID列表
+     * @param userId 用户ID
+     * @return 会话ID列表
+     */
+    public List<String> getAllSessionIdsByUser(Long userId) {
+        return conversationMapper.findDistinctSessionIdsByUserId(userId);
+    }
 
 }

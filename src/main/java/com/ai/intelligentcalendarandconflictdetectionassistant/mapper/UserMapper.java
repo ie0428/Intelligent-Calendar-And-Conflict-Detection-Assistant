@@ -4,6 +4,7 @@ import com.ai.intelligentcalendarandconflictdetectionassistant.pojo.User;
 import org.apache.ibatis.annotations.*;
 
 import java.util.List;
+import java.util.Optional;
 
 @Mapper
 public interface UserMapper {
@@ -17,6 +18,9 @@ public interface UserMapper {
     @Select("SELECT * FROM users WHERE username = #{username}")
     User findByUsername(String username);
 
+    @Select("SELECT * FROM users WHERE email = #{email}")
+    User findByEmail(String email);
+
     @Insert("INSERT INTO users(username, email, password_hash, display_name, timezone, language, avatar_url, is_active, created_at, updated_at) " +
             "VALUES(#{username}, #{email}, #{passwordHash}, #{displayName}, #{timezone}, #{language}, #{avatarUrl}, #{isActive}, #{createdAt}, #{updatedAt})")
     @Options(useGeneratedKeys = true, keyProperty = "id")
@@ -28,4 +32,11 @@ public interface UserMapper {
 
     @Delete("DELETE FROM users WHERE id = #{id}")
     void deleteById(Long id);
+
+    @Select("SELECT COUNT(*) FROM users WHERE email = #{email}")
+    Boolean existsByEmail(String email);
+
+    @Select("SELECT COUNT(*) FROM users WHERE username = #{username}")
+    Boolean existsByUsername(String username);
+
 }
