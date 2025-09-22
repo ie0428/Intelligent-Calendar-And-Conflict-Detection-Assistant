@@ -9,6 +9,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Description;
 import org.springframework.core.NestedExceptionUtils;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.Authentication;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -24,7 +26,7 @@ public class BookingTools {
 
 	@JsonInclude(Include.NON_NULL)
 	public record BookingDetails(String eventId, String name, LocalDate date, BookingStatus bookingStatus,
-								 String from, String to, String bookingClass) {
+									 String from, String to, String bookingClass) {
 	}
 
 	public record CancelBookingRequest(String eventId, String name) {
@@ -52,13 +54,14 @@ public class BookingTools {
 	public Function<FindCalendarEventRequest, List<BookingDetails>> findCalendarEvent() {
 		return request -> {
 			try {
+				String username = getCurrentUsername();
 				if (request.eventId() != null && !request.eventId().isEmpty()) {
 					// 查询单个事件
-					BookingDetails details = flightBookingService.getBookingDetails(request.eventId(), request.name());
+					BookingDetails details = flightBookingService.getBookingDetails(request.eventId(), username);
 					return List.of(details);
 				} else {
 					// 查询用户所有事件
-					return flightBookingService.getBookingsByUsername(request.name());
+					return flightBookingService.getBookingsByUsername(username);
 				}
 			} catch (Exception e) {
 				log.warn("Find calendar event: {}", NestedExceptionUtils.getMostSpecificCause(e).getMessage());
@@ -69,13 +72,13 @@ public class BookingTools {
 
 
 
-
 	@Bean
 	@Description("获取日程详细信息")
 	public Function<BookingDetailsRequest, BookingDetails> getBookingDetails() {
 		return request -> {
 			try {
-				return flightBookingService.getBookingDetails(request.eventId(), request.name());
+				String username = getCurrentUsername();
+				return flightBookingService.getBookingDetails(request.eventId(), username);
 			}
 			catch (Exception e) {
 				log.warn("Booking details: {}", NestedExceptionUtils.getMostSpecificCause(e).getMessage());
@@ -143,7 +146,8 @@ public class BookingTools {
 	public Function<AllBookingsRequest, List<BookingDetails>> getAllBookings() {
 		return request -> {
 			try {
-				return flightBookingService.getBookings();
+				String username = getCurrentUsername();
+				return flightBookingService.getBookingsByUsername(username);
 			} catch (Exception e) {
 				log.warn("获取所有日程失败: {}", NestedExceptionUtils.getMostSpecificCause(e).getMessage());
 				return List.of();
@@ -151,4 +155,12 @@ public class BookingTools {
 		};
 	}
 
+	// 获取当前登录用户的用户名
+	private String getCurrentUsername() {
+		Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+		if (authentication != null && authentication.isAuthenticated()) {
+			return authentication.getName();
+		}
+		throw new SecurityException("用户未认证");
+	}
 }
