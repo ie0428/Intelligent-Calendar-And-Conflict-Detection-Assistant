@@ -70,30 +70,50 @@
               <template #header>
                 <div class="table-header">
                   <span>我的日程安排</span>
-                  <el-button @click="getBookings" type="primary" size="small" icon="Refresh">刷新</el-button>
+                  <div style="display: flex; align-items: center; gap: 10px;">
+                    <el-radio-group v-model="currentView" size="small">
+                      <el-radio-button label="calendar">日历视图</el-radio-button>
+                      <el-radio-button label="table">表格视图</el-radio-button>
+                    </el-radio-group>
+                    <el-button @click="getBookings" type="primary" size="small" icon="Refresh">刷新</el-button>
+                  </div>
                 </div>
               </template>
-              <el-table :data="tableData" stripe style="width: 100%" v-loading="loading">
-                <el-table-column prop="eventId" label="ID" width="80" />
-                <el-table-column prop="name" label="名称" />
-                <el-table-column prop="date" label="日期" width="120" />
-                <el-table-column prop="from" label="开始时间" width="100" />
-                <el-table-column prop="to" label="结束时间" width="100" />
-                <el-table-column prop="bookingStatus" label="状态" width="100">
-                  <template #default="scope">
-                    <el-tag :type="scope.row.bookingStatus === 'CONFIRMED' ? 'success' : 'danger'">
-                      {{ scope.row.bookingStatus === "CONFIRMED" ? "✅ 确认" : "❌ 取消" }}
-                    </el-tag>
-                  </template>
-                </el-table-column>
-                <el-table-column prop="bookingClass" label="类别" />
-                <el-table-column label="操作" fixed="right" width="180">
-                  <template #default="scope">
-                    <el-button size="small" type="primary" @click="editBooking(scope.row)">更改</el-button>
-                    <el-button size="small" type="danger" @click="cancelBooking(scope.row)">取消</el-button>
-                  </template>
-                </el-table-column>
-              </el-table>
+              
+              <!-- 日历视图 -->
+              <div v-if="currentView === 'calendar'">
+                <CalendarView 
+                  :events="tableData" 
+                  @edit="editBooking"
+                  @cancel="cancelBooking"
+                  v-loading="loading"
+                />
+              </div>
+              
+              <!-- 表格视图 -->
+              <div v-else>
+                <el-table :data="tableData" stripe style="width: 100%" v-loading="loading">
+                  <el-table-column prop="eventId" label="ID" width="80" />
+                  <el-table-column prop="name" label="名称" />
+                  <el-table-column prop="date" label="日期" width="120" />
+                  <el-table-column prop="from" label="开始时间" width="100" />
+                  <el-table-column prop="to" label="结束时间" width="100" />
+                  <el-table-column prop="bookingStatus" label="状态" width="100">
+                    <template #default="scope">
+                      <el-tag :type="scope.row.bookingStatus === 'CONFIRMED' ? 'success' : 'danger'">
+                        {{ scope.row.bookingStatus === "CONFIRMED" ? "✅ 确认" : "❌ 取消" }}
+                      </el-tag>
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="bookingClass" label="类别" />
+                  <el-table-column label="操作" fixed="right" width="180">
+                    <template #default="scope">
+                      <el-button size="small" type="primary" @click="editBooking(scope.row)">更改</el-button>
+                      <el-button size="small" type="danger" @click="cancelBooking(scope.row)">取消</el-button>
+                    </template>
+                  </el-table-column>
+                </el-table>
+              </div>
             </el-card>
           </el-col>
 
@@ -209,9 +229,13 @@ import { MoreFilled } from "@element-plus/icons-vue";
 import { ref, onMounted, nextTick, watch, onUnmounted } from "vue";
 import axios from "axios";
 import { ElMessage, ElMessageBox } from "element-plus";
+import CalendarView from "./components/CalendarView.vue";
 
 export default {
   name: 'App',
+  components: {
+    CalendarView
+  },
   setup() {
     // 认证相关状态
     const isLoggedIn = ref(false);
@@ -253,6 +277,9 @@ export default {
     let count = 2;
     let eventSource;
     const sessionId = ref("session-" + Date.now());
+    
+    // 视图切换状态
+    const currentView = ref('calendar'); // 'calendar' 或 'table'
     
     // 历史记录相关
     const historyDialogVisible = ref(false);
@@ -537,6 +564,9 @@ export default {
       getBookings,
       editBooking,
       cancelBooking,
+      
+      // 视图切换
+      currentView,
       
       // 历史记录相关
       historyDialogVisible,
