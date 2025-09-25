@@ -94,7 +94,8 @@
               <div v-else>
                 <el-table :data="tableData" stripe style="width: 100%" v-loading="loading">
                   <el-table-column prop="eventId" label="ID" width="80" />
-                  <el-table-column prop="name" label="名称" />
+                  <el-table-column prop="title" label="会议主题" />
+                  <el-table-column prop="name" label="创建者" />
                   <el-table-column prop="date" label="日期" width="120" />
                   <el-table-column prop="from" label="开始时间" width="100" />
                   <el-table-column prop="to" label="结束时间" width="100" />
@@ -308,8 +309,9 @@ export default {
         // 设置axios默认认证头
         axios.defaults.headers.common['Authorization'] = `Bearer ${authToken}`;
         
-        // 重新生成sessionId
-        sessionId.value = "session-" + Date.now();
+        // 使用用户ID作为sessionId的基础，确保同一用户始终使用相同的sessionId
+        sessionId.value = "user-" + id + "-session-" + Date.now();
+        localStorage.setItem('sessionId', sessionId.value);
         
         ElMessage.success('登录成功！');
         getBookings();
@@ -339,6 +341,11 @@ export default {
       currentUser.value = { id: 0, username: '', email: '' };
       token.value = '';
       delete axios.defaults.headers.common['Authorization'];
+      
+      // 清理sessionId
+      sessionId.value = "session-" + Date.now();
+      localStorage.removeItem('sessionId');
+      
       activities.value = [{
         content: "⭐欢迎使用智能日程助手！请问有什么可以帮您的?",
         timestamp: new Date().toLocaleString(),
@@ -371,7 +378,7 @@ export default {
       });
 
       eventSource = new EventSource(
-          `${axios.defaults.baseURL}/ai/generateStreamAsString?message=${encodeURIComponent(msg.value)}&sessionId=${sessionId.value}`
+          `${axios.defaults.baseURL}/ai/generateStreamAsString?message=${encodeURIComponent(msg.value)}&sessionId=${sessionId.value}&userId=${currentUser.value.id}`
       );
       
       const currentCount = count;
@@ -427,20 +434,20 @@ export default {
     };
 
     const editBooking = (booking) => {
-      ElMessage.info(`准备编辑日程: ${booking.name}`);
+      ElMessage.info(`准备编辑日程: ${booking.title || booking.name}`);
       // 这里可以打开编辑对话框
     };
 
     const cancelBooking = async (booking) => {
       try {
         await ElMessageBox.confirm(
-            `确定要取消日程 "${booking.name}" 吗?`,
+            `确定要取消日程 "${booking.title || booking.name}" 吗?`,
             '确认取消',
             { type: 'warning' }
         );
         
         // 这里调用AI功能来取消日程
-        msg.value = `请帮我取消日程：${booking.name}`;
+        msg.value = `请帮我取消日程：${booking.title || booking.name}`;
         sendMsg();
         
       } catch (error) {
@@ -464,7 +471,7 @@ export default {
 
     const showUserSessions = async () => {
       try {
-        const response = await axios.get(`/api/conversations/sessions/user/${currentUser.value.id}`);
+        const response = await axios.get(`/api/conversations/sessions/current`);
         userSessions.value = response.data.map(sessionId => ({ sessionId }));
         sessionsDialogVisible.value = true;
       } catch (error) {
@@ -475,7 +482,7 @@ export default {
 
     const showAllConversations = async () => {
       try {
-        const response = await axios.get(`/api/conversations/user/${currentUser.value.id}`);
+        const response = await axios.get(`/api/conversations/user/current`);
         historyConversations.value = response.data;
         historyDialogTitle.value = "所有对话记录";
         historyDialogVisible.value = true;
@@ -512,12 +519,23 @@ export default {
       // 检查本地存储的token
       const savedToken = localStorage.getItem('authToken');
       const savedUser = localStorage.getItem('currentUser');
+      const savedSessionId = localStorage.getItem('sessionId');
       
       if (savedToken && savedUser) {
         token.value = savedToken;
         currentUser.value = JSON.parse(savedUser);
         isLoggedIn.value = true;
         axios.defaults.headers.common['Authorization'] = `Bearer ${savedToken}`;
+        
+        // 如果存在保存的sessionId，则使用它，否则生成新的
+        if (savedSessionId) {
+          sessionId.value = savedSessionId;
+          console.log('恢复之前的会话: ' + savedSessionId);
+        } else {
+          sessionId.value = "user-" + currentUser.value.id + "-session-" + Date.now();
+          localStorage.setItem('sessionId', sessionId.value);
+        }
+        
         getBookings();
       }
     });
@@ -527,14 +545,24 @@ export default {
       if (newVal) {
         localStorage.setItem('authToken', token.value);
         localStorage.setItem('currentUser', JSON.stringify(currentUser.value));
+        localStorage.setItem('sessionId', sessionId.value);
       } else {
         localStorage.removeItem('authToken');
         localStorage.removeItem('currentUser');
+        localStorage.removeItem('sessionId');
+      }
+    });
+
+    // 监听sessionId变化，保存到本地存储
+    const unwatchSession = watch(sessionId, (newVal) => {
+      if (isLoggedIn.value && newVal) {
+        localStorage.setItem('sessionId', newVal);
       }
     });
 
     onUnmounted(() => {
       unwatch();
+      unwatchSession();
       if (eventSource) {
         eventSource.close();
       }

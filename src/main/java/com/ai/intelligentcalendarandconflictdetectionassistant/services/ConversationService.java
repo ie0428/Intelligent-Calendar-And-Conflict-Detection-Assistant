@@ -3,7 +3,10 @@ package com.ai.intelligentcalendarandconflictdetectionassistant.services;
 import com.ai.intelligentcalendarandconflictdetectionassistant.mapper.ConversationMapper;
 import com.ai.intelligentcalendarandconflictdetectionassistant.pojo.Conversation;
 import com.ai.intelligentcalendarandconflictdetectionassistant.pojo.User;
+import com.ai.intelligentcalendarandconflictdetectionassistant.services.impls.UserDetailsImpl;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -17,9 +20,23 @@ public class ConversationService {
 
     @Autowired
     private UserService userService;
+
+    /**
+     * 获取当前登录用户的ID
+     * @return 当前用户ID
+     * @throws SecurityException 如果用户未认证
+     */
+    private Long getCurrentUserId() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null && authentication.isAuthenticated() && authentication.getPrincipal() instanceof UserDetailsImpl) {
+            UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
+            return userDetails.getId();
+        }
+        throw new SecurityException("用户未认证");
+    }
     /**
      * 保存对话记录到数据库
-     * @param userId 用户ID
+     * @param userId 用户ID（可选，如果为null则从SecurityContext获取）
      * @param sessionId 会话ID
      * @param userMessage 用户消息
      * @param aiResponse AI响应
@@ -30,14 +47,35 @@ public class ConversationService {
      */
     public Conversation saveConversation(Long userId, String sessionId, String userMessage, String aiResponse,
                                          String intent, String entities, Boolean successful) {
-        // 确保用户存在，如果不存在则创建
-        String username = "user_" + (userId != null ? userId : System.currentTimeMillis());
-        User user = userService.ensureUserExists(userId, username);
-
-        // 如果传入的userId为null，使用新创建的用户ID
-        if (userId == null && user.getId() != null) {
-            userId = user.getId();
+        // 如果userId为null，从SecurityContext获取当前登录用户的ID
+        if (userId == null) {
+            try {
+                userId = getCurrentUserId();
+                System.out.println("从SecurityContext获取到用户ID: " + userId);
+            } catch (SecurityException e) {
+                // 如果无法从SecurityContext获取，尝试从sessionId中提取用户ID
+                if (sessionId != null && sessionId.startsWith("user-")) {
+                    try {
+                        // 从sessionId中提取用户ID，格式为 "user-{userId}-session-{timestamp}"
+                        String[] parts = sessionId.split("-");
+                        if (parts.length >= 2) {
+                            userId = Long.parseLong(parts[1]);
+                            System.out.println("从sessionId中提取到用户ID: " + userId);
+                        }
+                    } catch (NumberFormatException ex) {
+                        System.err.println("无法从sessionId中提取用户ID: " + sessionId);
+                    }
+                }
+            }
         }
+
+        // 如果仍然无法确定用户ID，则使用默认用户
+        if (userId == null) {
+            // 使用默认用户ID 1，避免创建新用户
+            userId = 1L;
+            System.out.println("使用默认用户ID: " + userId);
+        }
+
         Conversation conversation = new Conversation();
         conversation.setUserId(userId);
         conversation.setSessionId(sessionId);

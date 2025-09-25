@@ -43,7 +43,7 @@
               :class="['event-badge', { 'cancelled': event.bookingStatus === 'CANCELLED' }]"
               @click.stop="showEventDetails(event)"
             >
-              {{ event.name }}
+              {{ event.title || event.name }}
             </div>
             <div v-if="day.events.length > 2" class="more-events">
               +{{ day.events.length - 2 }}更多
@@ -56,7 +56,7 @@
     <!-- 日程详情弹窗 -->
     <el-dialog
       v-model="eventDialogVisible"
-      :title="selectedEvent ? selectedEvent.name : '日程详情'"
+      :title="selectedEvent ? (selectedEvent.title || selectedEvent.name) : '日程详情'"
       width="500px"
     >
       <div v-if="selectedEvent" class="event-details">
@@ -304,6 +304,9 @@ export default {
 <style scoped>
 .calendar-container {
   padding: 20px;
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
 }
 
 .calendar-header {
@@ -352,21 +355,36 @@ export default {
   overflow: hidden;
   background-color: #ffffff;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  width: 100%;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  table-layout: fixed;
 }
 
 .weekdays {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   background: linear-gradient(135deg, #1890ff 0%, #40a9ff 100%);
+  width: 100%;
 }
 
 .weekday {
-  padding: 14px 12px;
+  padding: 14px 0;
   text-align: center;
   font-weight: 500;
   color: white;
   font-size: 14px;
   border-right: 1px solid rgba(255, 255, 255, 0.2);
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .weekday:last-child {
@@ -375,17 +393,26 @@ export default {
 
 .days {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-auto-rows: minmax(120px, auto);
+  width: 100%;
 }
 
 .day {
   min-height: 120px;
   border-right: 1px solid #f0f0f0;
   border-bottom: 1px solid #f0f0f0;
-  padding: 10px;
+  padding: 10px 0;
   cursor: pointer;
   transition: all 0.3s ease;
   position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .day:hover {
@@ -463,6 +490,14 @@ export default {
   margin-bottom: 8px;
   text-align: center;
   position: relative;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .day-events {

@@ -3,11 +3,14 @@ package com.ai.intelligentcalendarandconflictdetectionassistant.controller;
 import com.ai.intelligentcalendarandconflictdetectionassistant.advisor.DatabaseChatMemoryAdvisor;
 import com.ai.intelligentcalendarandconflictdetectionassistant.advisor.loggingAdvisor;
 import com.ai.intelligentcalendarandconflictdetectionassistant.services.ConversationService;
+import com.ai.intelligentcalendarandconflictdetectionassistant.services.impls.UserDetailsImpl;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.RequestResponseAdvisor;
 import org.springframework.ai.chat.client.advisor.PromptChatMemoryAdvisor;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.http.MediaType;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -59,15 +62,34 @@ public class OpenAiController {
     @GetMapping(value = "/ai/generateStreamAsString", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<String> generateStreamAsString(
             @RequestParam(value = "message", defaultValue = "讲个笑话") String message,
-            @RequestParam(value = "sessionId", required = false) String sessionId) {
+            @RequestParam(value = "sessionId", required = false) String sessionId,
+            @RequestParam(value = "userId", required = false) Long userId) {
+
+        // 优先使用URL参数中的userId，如果没有则尝试从认证中获取
+        Long currentUserId = userId;
+        if (currentUserId == null) {
+            currentUserId = getCurrentUserId();
+        }
+        
+        System.out.println("当前登录用户ID: " + currentUserId + ", sessionId: " + sessionId);
+
+        // 如果无法获取用户ID，返回错误信息
+        if (currentUserId == null) {
+            return Flux.just("错误：无法识别用户身份，请重新登录")
+                    .concatWith(Flux.just("[complete]"));
+        }
+
+        // 创建一个final变量用于在lambda表达式中使用
+        final Long finalCurrentUserId = currentUserId;
 
         Flux<String> content = chatClient.prompt()
                 .user(message)
                 .system(promptSystemSpec -> promptSystemSpec.param("current_date", LocalDate.now().toString()))
                 .advisors(request -> {
                     request.param("sessionId", sessionId);
-                    System.out.println("设置advisor参数 - sessionId: " + sessionId);
-                })// 传递sessionId给advisor
+                    request.param("userId", finalCurrentUserId);
+                    System.out.println("设置advisor参数 - sessionId: " + sessionId + ", userId: " + finalCurrentUserId);
+                })// 传递sessionId和userId给advisor
                 .stream()
                 .content();
 
@@ -75,5 +97,23 @@ public class OpenAiController {
                 .doOnNext(response -> System.out.println( response))
                 .doOnComplete(() -> System.out.println("AI响应完成"))
                 .concatWith(Flux.just("[complete]"));
+    }
+
+    /**
+     * 获取当前登录用户的ID
+     * @return 当前用户ID，如果无法获取则返回null
+     */
+    private Long getCurrentUserId() {
+        try {
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            if (authentication != null && authentication.isAuthenticated() && 
+                authentication.getPrincipal() instanceof UserDetailsImpl) {
+                UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
+                return userDetails.getId();
+            }
+        } catch (Exception e) {
+            System.err.println("获取当前用户ID失败: " + e.getMessage());
+        }
+        return null;
     }
 }
