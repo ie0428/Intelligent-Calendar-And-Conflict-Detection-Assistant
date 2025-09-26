@@ -26,39 +26,6 @@ public class FlightBookingService {
         this.calendarEventMapper = calendarEventMapper;
     }
 
-    /**
-     * 获取当前登录用户的ID
-     * @return 当前用户ID
-     * @throws SecurityException 如果用户未认证
-     */
-    private Long getCurrentUserId() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication != null && authentication.isAuthenticated() && authentication.getPrincipal() instanceof UserDetailsImpl) {
-            UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
-            return userDetails.getId();
-        }
-        throw new SecurityException("用户未认证");
-    }
-
-    /**
-     * 获取当前登录用户的用户名
-     * @return 当前用户名
-     * @throws SecurityException 如果用户未认证
-     */
-    private String getCurrentUsername() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication != null && authentication.isAuthenticated()) {
-            return authentication.getName();
-        }
-        throw new SecurityException("用户未认证");
-    }
-
-	// 获取所有日历事件
-	public List<BookingTools.BookingDetails> getBookings() {
-		return calendarEventMapper.findAll().stream()
-				.map(this::toBookingDetails)
-				.collect(Collectors.toList());
-	}
 
 	// 根据事件ID查找日历事件
 	public CalendarEvent findCalendarEvent(Long eventId, String username) {
@@ -84,17 +51,21 @@ public class FlightBookingService {
 		return event;
 	}
 
-	// 根据用户名查找该用户的所有日程
-	public List<BookingDetails> getBookingsByUsername(String username) {
-		User user = userMapper.findByUsername(username);
-		if (user == null) {
-			return List.of(); // 用户不存在，返回空列表
+	// 根据事件ID和用户ID查找日历事件
+	public CalendarEvent findCalendarEventByUserId(Long eventId, Long userId) {
+		CalendarEvent event = calendarEventMapper.findById(eventId);
+		if (event == null) {
+			throw new IllegalArgumentException("Calendar event not found");
 		}
 
-		return calendarEventMapper.findByUserId(user.getId()).stream()
-				.map(this::toBookingDetails)
-				.collect(Collectors.toList());
+		if (!event.getUserId().equals(userId)) {
+			throw new IllegalArgumentException("Calendar event not found");
+		}
+
+		return event;
 	}
+
+
 
 	// 根据用户ID查找该用户的所有日程
 	public List<BookingDetails> getBookingsByUserId(Long userId) {
@@ -109,20 +80,17 @@ public class FlightBookingService {
 	}
 
 
-	// 根据事件ID和用户名查询事件详情
-	public BookingDetails getBookingDetails(String eventId, String username) {
-		var event = findCalendarEvent(Long.valueOf(eventId), username);
+	// 根据事件ID和用户ID查询事件详情
+	public BookingDetails getBookingDetailsByUserId(String eventId, Long userId) {
+		var event = findCalendarEventByUserId(Long.valueOf(eventId), userId);
 		return toBookingDetails(event);
 	}
 
-	// 更改日历事件
-	public void changeBooking(String eventId, String username, String newDate, String location, String description) {
-		CalendarEvent event;
-		if(username!=null&&!username.isEmpty()){
-			event = findCalendarEvent(Long.valueOf(eventId), username);
-		}else {
-			event = findCalendarEventById(Long.valueOf(eventId));
-		}
+
+
+	// 根据用户ID更改日历事件
+	public void changeBookingByUserId(String eventId, Long userId, String newDate, String location, String description) {
+		CalendarEvent event = findCalendarEventByUserId(Long.valueOf(eventId), userId);
 
 		LocalDate newLocalDate = LocalDate.parse(newDate);
 		event.setStartTime(newLocalDate.atStartOfDay());
@@ -130,18 +98,18 @@ public class FlightBookingService {
 		event.setLocation(location);
 		event.setDescription(description);
 
+		// 设置更新时间
+		event.setUpdatedAt(LocalDateTime.now());
+
 		calendarEventMapper.update(event);
 	}
 
-	// 取消日历事件
-	public void cancelBooking(String eventId, String username) {
-		CalendarEvent event;
-		if(username!=null&&!username.isEmpty()){
-			event = findCalendarEvent(Long.valueOf(eventId), username);
-		}else {
-			event = findCalendarEventById(Long.valueOf(eventId));
-		}
+	// 根据用户ID取消日历事件
+	public void cancelBookingByUserId(String eventId, Long userId) {
+		CalendarEvent event = findCalendarEventByUserId(Long.valueOf(eventId), userId);
 		event.setStatus(CalendarEvent.Status.CANCELLED);
+		// 设置更新时间
+		event.setUpdatedAt(LocalDateTime.now());
 		calendarEventMapper.update(event);
 	}
 
@@ -162,45 +130,15 @@ public class FlightBookingService {
 				event.getTitle() != null ? event.getTitle() : "无标题会议"
 		);
 	}
-
-	// 创建日历事件
-	public void createBooking(String date, String location, String description, String title) {
-		// 获取当前登录用户的ID和用户名
-		Long userId = getCurrentUserId();
-		String username = getCurrentUsername();
-		
-		// 查找用户，如果不存在则创建
-		User user = userMapper.findByUsername(username);
-		if (user == null) {
-			// 用户不存在，创建新用户
-			user = new User();
-			user.setId(userId);
-			user.setUsername(username);
-			userMapper.insert(user);
-			// 重新获取插入后的用户（包含生成的ID）
-			user = userMapper.findByUsername(username);
-		}
-
-		LocalDate localDate = LocalDate.parse(date);
-		CalendarEvent event = new CalendarEvent();
-		event.setUserId(user.getId());
-		event.setStartTime(localDate.atStartOfDay());
-		event.setEndTime(localDate.atTime(23, 59));
-		event.setLocation(location);
-		event.setDescription(description);
-		event.setStatus(CalendarEvent.Status.TENTATIVE);
-		event.setEventType(CalendarEvent.EventType.MEETING);
-		// 添加标题字段，使用描述或位置作为标题
-		if (title == null || title.trim().isEmpty()) {
-			title = "会议: " + (location != null ? location : "未指定地点");
-		}
-		event.setTitle(title);
-
-		calendarEventMapper.insert(event);
-	}
+	
 
 	// 创建日历事件（支持通过参数传递用户ID）
 	public void createBooking(String date, String location, String description, String title, Long userId) {
+		createBooking(date, location, description, title, userId, "UTC");
+	}
+
+	// 创建日历事件（支持时区参数）
+	public void createBooking(String date, String location, String description, String title, Long userId, String timezone) {
 		// 查找用户，如果不存在则创建
 		User user = userMapper.findById(userId);
 		if (user == null) {
@@ -217,11 +155,22 @@ public class FlightBookingService {
 		event.setDescription(description);
 		event.setStatus(CalendarEvent.Status.TENTATIVE);
 		event.setEventType(CalendarEvent.EventType.MEETING);
+		// 设置时区
+		if (timezone != null && !timezone.trim().isEmpty()) {
+			event.setTimezone(timezone);
+		} else {
+			event.setTimezone("UTC");
+		}
 		// 添加标题字段，使用描述或位置作为标题
 		if (title == null || title.trim().isEmpty()) {
 			title = "会议: " + (location != null ? location : "未指定地点");
 		}
 		event.setTitle(title);
+
+		// 设置创建和更新时间
+		LocalDateTime now = LocalDateTime.now();
+		event.setCreatedAt(now);
+		event.setUpdatedAt(now);
 
 		calendarEventMapper.insert(event);
 	}

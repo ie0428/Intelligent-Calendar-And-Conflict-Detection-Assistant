@@ -19,7 +19,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.function.Function;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Configuration
@@ -33,23 +32,38 @@ public class BookingTools {
 								 String from, String to, String bookingClass, String title) {
 	}
 
-	public record CancelBookingRequest(String eventId, String name) {
+	// 基于用户ID的请求记录
+	public record CancelBookingRequest(String eventId, Long userId) {
 	}
 
 	@Bean
 	@Description("取消日程")
 	public Function<CancelBookingRequest, String> cancelBooking() {
 		return request -> {
-			flightBookingService.cancelBooking(request.eventId(), request.name());
-			return "";
+			try {
+				log.info("开始取消日程，事件ID: {}", request.eventId());
+				
+				Long userId = getCurrentUserId();
+				if (userId == null) {
+					userId = request.userId();
+					log.warn("无法从认证上下文获取用户ID，使用请求参数中的用户ID: {}", userId);
+				} else {
+					log.info("成功获取当前用户ID: {}", userId);
+				}
+				
+				log.info("调用FlightBookingService取消日程，用户ID: {}, 事件ID: {}", userId, request.eventId());
+				flightBookingService.cancelBookingByUserId(request.eventId(), userId);
+				return "日程取消成功";
+			} catch (Exception e) {
+				return "日程取消失败: " + e.getMessage();
+			}
 		};
 	}
 
-
-	public record FindCalendarEventRequest(String eventId, String name) {
-		// 添加默认构造函数支持只传name
-		public FindCalendarEventRequest(String name) {
-			this(null, name);
+	public record FindCalendarEventRequest(String eventId, Long userId) {
+		// 添加默认构造函数支持只传userId
+		public FindCalendarEventRequest(Long userId) {
+			this(null, userId);
 		}
 	}
 
@@ -58,73 +72,111 @@ public class BookingTools {
 	public Function<FindCalendarEventRequest, List<BookingDetails>> findCalendarEvent() {
 		return request -> {
 			try {
-				String username = getCurrentUsername();
+				log.info("开始查找用户日程，事件ID: {}, 用户ID: {}", request.eventId(), request.userId());
 				
-				// 如果无法从认证上下文获取用户名，尝试从请求参数中获取
-				if (username == null || username.isEmpty()) {
-					username = request.name();
+				Long userId = getCurrentUserId();
+				
+				// 如果无法从认证上下文获取用户ID，使用请求参数中的userId
+				if (userId == null) {
+					userId = request.userId();
+					log.warn("无法从认证上下文获取用户ID，使用请求参数中的用户ID: {}", userId);
+				} else {
+					log.info("成功获取当前用户ID: {}", userId);
 				}
 				
 				if (request.eventId() != null && !request.eventId().isEmpty()) {
 					// 查询单个事件
-					BookingDetails details = flightBookingService.getBookingDetails(request.eventId(), username);
+					log.info("查询单个事件，事件ID: {}, 用户ID: {}", request.eventId(), userId);
+					BookingDetails details = flightBookingService.getBookingDetailsByUserId(request.eventId(), userId);
+					log.info("成功查询到事件详情");
 					return List.of(details);
 				} else {
 					// 查询用户所有事件
-					return flightBookingService.getBookingsByUsername(username);
+					log.info("查询用户所有事件，用户ID: {}", userId);
+					List<BookingDetails> bookings = flightBookingService.getBookingsByUserId(userId);
+					log.info("成功查询到 {} 个事件", bookings.size());
+					return bookings;
 				}
 			} catch (Exception e) {
-				log.warn("Find calendar event: {}", NestedExceptionUtils.getMostSpecificCause(e).getMessage());
+				log.warn("查找用户日程失败: {}", NestedExceptionUtils.getMostSpecificCause(e).getMessage());
 				return List.of();
 			}
 		};
 	}
-
-
 
 	@Bean
 	@Description("获取日程详细信息")
 	public Function<BookingDetailsRequest, BookingDetails> getBookingDetails() {
 		return request -> {
 			try {
-				String username = getCurrentUsername();
+				log.info("开始获取日程详细信息，事件ID: {}", request.eventId());
 				
-				// 如果无法从认证上下文获取用户名，尝试从请求参数中获取
-				if (username == null || username.isEmpty()) {
-					username = request.name();
+				Long userId = getCurrentUserId();
+				
+				// 如果无法从认证上下文获取用户ID，使用请求参数中的userId
+				if (userId == null) {
+					userId = request.userId();
+					log.warn("无法从认证上下文获取用户ID，使用请求参数中的用户ID: {}", userId);
+				} else {
+					log.info("成功获取当前用户ID: {}", userId);
 				}
 				
-				return flightBookingService.getBookingDetails(request.eventId(), username);
+				log.info("调用FlightBookingService获取日程详细信息，用户ID: {}, 事件ID: {}", userId, request.eventId());
+				BookingDetails details = flightBookingService.getBookingDetailsByUserId(request.eventId(), userId);
+				log.info("成功获取日程详细信息: {}", details);
+				return details;
 			}
 			catch (Exception e) {
-				log.warn("Booking details: {}", NestedExceptionUtils.getMostSpecificCause(e).getMessage());
-				return new BookingDetails(request.eventId(), request.name(), null, null, null, null, null,null);
+				log.warn("获取日程详细信息失败: {}", NestedExceptionUtils.getMostSpecificCause(e).getMessage());
+				return new BookingDetails(request.eventId(), "Unknown User", null, null, null, null, null, null);
 			}
 		};
 	}
 
-	public record BookingDetailsRequest(String eventId, String name) {
+	public record BookingDetailsRequest(String eventId, Long userId) {
 	}
 
 	@Bean
 	@Description("修改日程的信息")
 	public Function<ChangeBookingDatesRequest, String> changeBooking() {
 		return request -> {
-			flightBookingService.changeBooking(request.eventId(), request.name(), request.date(), request.from(),
-					request.to());
-			return "";
+			try {
+				log.info("开始修改日程，事件ID: {}, 日期: {}, 从: {}, 到: {}", 
+						request.eventId(), request.date(), request.from(), request.to());
+				
+				Long userId = getCurrentUserId();
+				if (userId == null) {
+					userId = request.userId();
+					log.warn("无法从认证上下文获取用户ID，使用请求参数中的用户ID: {}", userId);
+				} else {
+					log.info("成功获取当前用户ID: {}", userId);
+				}
+				
+				log.info("调用FlightBookingService修改日程，用户ID: {}, 事件ID: {}", userId, request.eventId());
+				flightBookingService.changeBookingByUserId(request.eventId(), userId, request.date(), request.from(),
+						request.to());
+				log.info("日程修改成功");
+				return "日程修改成功";
+			} catch (Exception e) {
+				log.error("修改日程失败: ", e);
+				return "日程修改失败: " + e.getMessage();
+			}
 		};
 	}
 
-	public record ChangeBookingDatesRequest(String eventId, String name,String date, String from, String to) {
+	public record ChangeBookingDatesRequest(String eventId, Long userId, String date, String from, String to) {
 	}
 
-
 	// 在 BookingTools 类中添加
-	public record CreateBookingRequest(String name, String date, String from, String to, String title) {
-		// 无参构造函数，用于向后兼容
-		public CreateBookingRequest(String name, String date, String from, String to) {
-			this(name, date, from, to, null);
+	public record CreateBookingRequest(String date, String from, String to, String title, String description, String location, String timezone) {
+		// 简化构造函数，只传必要字段
+		public CreateBookingRequest(String date, String from, String to, String title) {
+			this(date, from, to, title, null, null, "UTC");
+		}
+		
+		// 包含描述的构造函数
+		public CreateBookingRequest(String date, String from, String to, String title, String description) {
+			this(date, from, to, title, description, null, "UTC");
 		}
 	}
 
@@ -134,43 +186,60 @@ public class BookingTools {
 	public Function<CreateBookingRequest, String> createBooking() {
 		return request -> {
 			try {
-				// 传递标题参数，如果没有提供则使用默认值
+				log.info("开始创建日程，请求参数: date={}, from={}, to={}, title={}", 
+						request.date(), request.from(), request.to(), request.title());
+				
+				// 获取用户ID
+				Long userId = getCurrentUserId();
+				
+				// 如果无法从认证上下文获取用户ID，使用默认用户ID
+				if (userId == null) {
+					userId = 3L; // 默认用户ID
+					log.warn("无法从认证上下文获取用户ID，使用默认用户ID: {}", userId);
+				} else {
+					log.info("成功获取当前用户ID: {}", userId);
+				}
+
+				// 处理标题
 				String title = request.title();
 				if (title == null || title.trim().isEmpty()) {
 					title = "会议: " + (request.from() != null ? request.from() : "未指定地点");
+					log.info("标题为空，自动生成标题: {}", title);
 				}
 
-				// 尝试从认证上下文获取用户ID
-				Long userId = null;
-				try {
-					Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-					if (authentication != null && authentication.isAuthenticated() && 
-						authentication.getPrincipal() instanceof UserDetailsImpl) {
-						UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
-						userId = userDetails.getId();
-					}
-				} catch (Exception e) {
-					log.warn("无法从认证上下文获取用户ID，将使用默认用户ID");
+				// 处理描述
+				String description = request.description();
+				if (description == null || description.trim().isEmpty()) {
+					description = request.to(); // 如果没有提供描述，使用to字段作为描述
+					log.info("描述为空，使用to字段作为描述: {}", description);
 				}
 
-				// 如果无法从认证上下文获取用户ID，尝试从advisor参数中获取
-				if (userId == null) {
-					// 尝试从advisor参数中获取sessionId并提取用户ID
-					userId = extractUserIdFromAdvisorParams();
-					
-					// 如果仍然无法获取，使用默认用户ID（当前登录用户ID为3）
-					if (userId == null) {
-						userId = 3L;
-					}
+				// 处理地点
+				String location = request.location();
+				if (location == null || location.trim().isEmpty()) {
+					location = request.from(); // 如果没有提供地点，使用from字段作为地点
+					log.info("地点为空，使用from字段作为地点: {}", location);
 				}
+
+				// 处理时区
+				String timezone = request.timezone();
+				if (timezone == null || timezone.trim().isEmpty()) {
+					timezone = "UTC"; // 默认时区
+					log.info("时区为空，使用默认时区: {}", timezone);
+				}
+
+				log.info("调用FlightBookingService创建日程，参数: userId={}, date={}, location={}, description={}, title={}, timezone={}",
+						userId, request.date(), location, description, title, timezone);
 
 				flightBookingService.createBooking(
 						request.date(),
-						request.from(),
-						request.to(),
+						location,
+						description,
 						title,
-						userId
+						userId,
+						timezone
 				);
+				log.info("日程创建成功");
 				return "日程创建成功";
 			} catch (Exception e) {
 				log.error("创建日程失败: ", e);
@@ -186,14 +255,22 @@ public class BookingTools {
 	public Function<AllBookingsRequest, List<BookingDetails>> getAllBookings() {
 		return request -> {
 			try {
-				String username = getCurrentUsername();
+				log.info("开始获取所有日程");
 				
-				// 如果无法从认证上下文获取用户名，使用默认用户名
-				if (username == null || username.isEmpty()) {
-					username = "testuser"; // 默认用户名
+				Long userId = getCurrentUserId();
+
+				// 如果无法从认证上下文获取用户ID，使用默认用户ID
+				if (userId == null) {
+					userId = 3L; // 默认用户ID
+					log.warn("无法从认证上下文获取用户ID，使用默认用户ID: {}", userId);
+				} else {
+					log.info("成功获取当前用户ID: {}", userId);
 				}
 				
-				return flightBookingService.getBookingsByUsername(username);
+				log.info("调用FlightBookingService获取用户所有日程，用户ID: {}", userId);
+				List<BookingDetails> bookings = flightBookingService.getBookingsByUserId(userId);
+				log.info("成功获取到 {} 个日程", bookings.size());
+				return bookings;
 			} catch (Exception e) {
 				log.warn("获取所有日程失败: {}", NestedExceptionUtils.getMostSpecificCause(e).getMessage());
 				return List.of();
@@ -201,89 +278,37 @@ public class BookingTools {
 		};
 	}
 
-	// 获取当前登录用户的用户名
-	private String getCurrentUsername() {
-		Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-		if (authentication != null && authentication.isAuthenticated()) {
-			return authentication.getName();
-		}
-		throw new SecurityException("用户未认证");
-	}
-
-	// 从advisor参数中提取用户ID
-	private Long extractUserIdFromAdvisorParams() {
+	/**
+	 * 获取当前登录用户的ID
+	 * @return 当前用户ID，如果无法获取返回null
+	 */
+	private Long getCurrentUserId() {
 		try {
-			// 尝试从ThreadLocal或请求上下文中获取sessionId
-			// 这里需要获取当前请求的sessionId，然后从中提取用户ID
-			
-			// 由于Spring AI框架的advisor参数传递机制，我们需要通过其他方式获取sessionId
-			// 可以尝试从SecurityContextHolder获取认证信息，或者从请求参数中获取
-			
 			Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-			if (authentication != null && authentication.isAuthenticated() && 
-				authentication.getPrincipal() instanceof UserDetailsImpl) {
-				UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
-				return userDetails.getId();
-			}
+			log.info("尝试从SecurityContext获取认证信息，认证对象: {}", authentication);
 			
-			// 如果无法从认证上下文获取，尝试从HTTP请求中获取sessionId
-			// 通过ServletRequestAttributes获取当前请求
-			try {
-				ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
-				if (attributes != null) {
-					HttpServletRequest request = attributes.getRequest();
-					
-					// 尝试从请求参数中获取sessionId
-					String sessionId = request.getParameter("sessionId");
-					if (sessionId != null && !sessionId.isEmpty()) {
-						return extractUserIdFromSessionId(sessionId);
-					}
-					
-					// 尝试从请求头中获取sessionId
-					sessionId = request.getHeader("sessionId");
-					if (sessionId != null && !sessionId.isEmpty()) {
-						return extractUserIdFromSessionId(sessionId);
-					}
-					
-					// 尝试从请求头中获取X-Session-Id
-					sessionId = request.getHeader("X-Session-Id");
-					if (sessionId != null && !sessionId.isEmpty()) {
-						return extractUserIdFromSessionId(sessionId);
-					}
-				}
-			} catch (Exception e) {
-				log.warn("从HTTP请求获取sessionId失败: {}", e.getMessage());
-			}
-			
-		} catch (Exception e) {
-			log.warn("从advisor参数提取用户ID失败: {}", e.getMessage());
-		}
-		
-		return null;
-	}
-
-	// 从sessionId字符串中提取用户ID
-	private Long extractUserIdFromSessionId(String sessionId) {
-		if (sessionId == null || sessionId.isEmpty()) {
-			return null;
-		}
-		
-		// sessionId格式: "user-{userId}-session-{timestamp}"
-		// 例如: "user-3-session-1758795908586"
-		try {
-			if (sessionId.startsWith("user-")) {
-				int firstDashIndex = sessionId.indexOf("-");
-				int secondDashIndex = sessionId.indexOf("-", firstDashIndex + 1);
+			if (authentication != null) {
+				log.info("认证对象不为null，是否已认证: {}", authentication.isAuthenticated());
+				log.info("认证主体类型: {}", authentication.getPrincipal() != null ? authentication.getPrincipal().getClass().getName() : "null");
 				
-				if (secondDashIndex > firstDashIndex + 1) {
-					String userIdStr = sessionId.substring(firstDashIndex + 1, secondDashIndex);
-					return Long.parseLong(userIdStr);
+				if (authentication.isAuthenticated() && authentication.getPrincipal() instanceof UserDetailsImpl) {
+					UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
+					Long userId = userDetails.getId();
+					log.info("成功从认证上下文获取用户ID: {}", userId);
+					return userId;
+				} else {
+					log.warn("认证信息不符合要求：isAuthenticated={}, principal类型正确={}", 
+							authentication.isAuthenticated(), 
+							authentication.getPrincipal() instanceof UserDetailsImpl);
 				}
+			} else {
+				log.warn("SecurityContext中未找到认证信息");
 			}
 		} catch (Exception e) {
-			log.warn("从sessionId提取用户ID失败: {}, sessionId: {}", e.getMessage(), sessionId);
+			log.error("从认证上下文获取用户ID时发生异常: {}", e.getMessage(), e);
 		}
 		
+		log.warn("无法从认证上下文获取用户ID，返回null");
 		return null;
 	}
 }
