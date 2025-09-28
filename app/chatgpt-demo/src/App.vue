@@ -64,7 +64,10 @@
       </el-header>
 
       <el-main>
-        <el-row :gutter="20">
+        <!-- 冲突检测组件 -->
+        <ConflictDetection />
+        
+        <el-row :gutter="20" style="margin-top: 20px;">
           <el-col :span="16">
             <el-card>
               <template #header>
@@ -231,14 +234,58 @@ import { ref, onMounted, nextTick, watch, onUnmounted } from "vue";
 import axios from "axios";
 import { ElMessage, ElMessageBox } from "element-plus";
 import CalendarView from "./components/CalendarView.vue";
+import ConflictDetection from "./components/ConflictDetection.vue";
 
 export default {
   name: 'App',
   components: {
-    CalendarView
+    CalendarView,
+    ConflictDetection
   },
   setup() {
-    // 认证相关状态
+    // 添加错误边界处理
+    const errorHandler = (error, instance, info) => {
+      console.error('组件错误捕获:', error);
+      console.error('错误实例:', instance);
+      console.error('错误信息:', info);
+      
+      // 如果是TypeError，显示友好的错误提示
+      if (error instanceof TypeError) {
+        ElMessage.error('发生了一个错误，请刷新页面重试');
+        console.error('类型错误详情:', error.message);
+      }
+    };
+
+    // 数据验证工具函数
+    const validateUserData = (data, source = 'unknown') => {
+      if (!data) {
+        console.warn(`[${source}] 用户数据为空`);
+        return false;
+      }
+      if (typeof data !== 'object') {
+        console.warn(`[${source}] 用户数据类型不正确:`, typeof data);
+        return false;
+      }
+      if (!data.id || !data.username) {
+        console.warn(`[${source}] 用户数据缺少必要字段:`, { id: !!data.id, username: !!data.username });
+        return false;
+      }
+      return true;
+    };
+
+    const validateSessionData = (data, source = 'unknown') => {
+      if (!data) {
+        console.warn(`[${source}] 会话数据为空`);
+        return false;
+      }
+      if (!Array.isArray(data)) {
+        console.warn(`[${source}] 会话数据不是数组:`, typeof data);
+        return false;
+      }
+      return true;
+    };
+
+    // 响应式数据
     const isLoggedIn = ref(false);
     const currentUser = ref({ id: 0, username: '', email: '' });
     const token = ref('');
@@ -302,6 +349,11 @@ export default {
         const response = await axios.post('/api/auth/signin', loginForm.value);
         const { token: authToken, id, username, email } = response.data;
         
+        // 添加调试信息
+        console.log('登录响应用户ID:', id);
+        console.log('登录响应用户名:', username);
+        console.log('登录响应邮箱:', email);
+        
         token.value = authToken;
         currentUser.value = { id, username, email };
         isLoggedIn.value = true;
@@ -341,11 +393,11 @@ export default {
       currentUser.value = { id: 0, username: '', email: '' };
       token.value = '';
       delete axios.defaults.headers.common['Authorization'];
-      
+
       // 清理sessionId
       sessionId.value = "session-" + Date.now();
       localStorage.removeItem('sessionId');
-      
+
       activities.value = [{
         content: "⭐欢迎使用智能日程助手！请问有什么可以帮您的?",
         timestamp: new Date().toLocaleString(),
@@ -377,6 +429,10 @@ export default {
         color: "#0bbd87",
       });
 
+      // 添加调试信息
+      console.log('发送消息时的用户ID:', currentUser.value.id);
+      console.log('发送消息时的用户名:', currentUser.value.username);
+      
       eventSource = new EventSource(
           `${axios.defaults.baseURL}/ai/generateStreamAsString?message=${encodeURIComponent(msg.value)}&sessionId=${sessionId.value}&userId=${currentUser.value.id}`
       );
@@ -410,7 +466,7 @@ export default {
 
     const scrollToBottom = () => {
       nextTick(() => {
-        if (messagesContainer.value) {
+        if (messagesContainer && messagesContainer.value) {
           messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
         }
       });
@@ -418,12 +474,26 @@ export default {
 
     // 日程管理方法
     const getBookings = async () => {
+      // 确保用户已登录
+      if (!isLoggedIn.value || !currentUser.value || !currentUser.value.id) {
+        console.warn('用户未登录或用户信息不完整，无法获取日程');
+        tableData.value = [];
+        return;
+      }
+      
       loading.value = true;
       try {
         const response = await axios.get('/booking/list');
-        tableData.value = response.data;
+        // 确保response.data存在且是数组
+        if (response && response.data && Array.isArray(response.data)) {
+          tableData.value = response.data;
+        } else {
+          console.warn('获取到的日程数据格式不正确:', response);
+          tableData.value = [];
+        }
       } catch (error) {
         console.error('获取日程失败:', error);
+        tableData.value = []; // 确保tableData始终是数组
         if (error.response?.status === 401) {
           ElMessage.error('认证已过期，请重新登录');
           handleLogout();
@@ -458,8 +528,23 @@ export default {
     // 历史记录方法
     const loadHistory = async () => {
       try {
+        // 确保sessionId存在
+        if (!sessionId.value) {
+          console.warn('sessionId不存在，无法加载历史记录');
+          historyConversations.value = [];
+          historyDialogTitle.value = "当前会话记录";
+          historyDialogVisible.value = true;
+          return;
+        }
+        
         const response = await axios.get(`/api/conversations/session/${sessionId.value}`);
-        historyConversations.value = response.data;
+        // 确保response.data存在且是数组
+        if (response && response.data && Array.isArray(response.data)) {
+          historyConversations.value = response.data;
+        } else {
+          console.warn('获取到的对话数据格式不正确:', response);
+          historyConversations.value = [];
+        }
         historyDialogTitle.value = "当前会话记录";
         historyDialogVisible.value = true;
       } catch (error) {
@@ -472,10 +557,17 @@ export default {
     const showUserSessions = async () => {
       try {
         const response = await axios.get(`/api/conversations/sessions/current`);
-        userSessions.value = response.data.map(sessionId => ({ sessionId }));
+        // 确保response.data存在且是数组
+        if (response && response.data && Array.isArray(response.data)) {
+          userSessions.value = response.data.map(sessionId => ({ sessionId }));
+        } else {
+          console.warn('获取到的会话数据格式不正确:', response);
+          userSessions.value = [];
+        }
         sessionsDialogVisible.value = true;
       } catch (error) {
         console.error('获取用户会话失败:', error);
+        userSessions.value = [];
         ElMessage.error('获取会话列表失败');
       }
     };
@@ -483,7 +575,13 @@ export default {
     const showAllConversations = async () => {
       try {
         const response = await axios.get(`/api/conversations/user/current`);
-        historyConversations.value = response.data;
+        // 确保response.data存在且是数组
+        if (response && response.data && Array.isArray(response.data)) {
+          historyConversations.value = response.data;
+        } else {
+          console.warn('获取到的对话数据格式不正确:', response);
+          historyConversations.value = [];
+        }
         historyDialogTitle.value = "所有对话记录";
         historyDialogVisible.value = true;
       } catch (error) {
@@ -495,8 +593,21 @@ export default {
 
     const loadSessionConversations = async (targetSessionId) => {
       try {
+        // 验证targetSessionId
+        if (!targetSessionId || typeof targetSessionId !== 'string') {
+          console.warn('无效的会话ID:', targetSessionId);
+          ElMessage.error('无效的会话ID');
+          return;
+        }
+        
         const response = await axios.get(`/api/conversations/session/${targetSessionId}`);
-        historyConversations.value = response.data;
+        // 确保response.data存在且是数组
+        if (response && response.data && Array.isArray(response.data)) {
+          historyConversations.value = response.data;
+        } else {
+          console.warn('获取到的对话数据格式不正确:', response);
+          historyConversations.value = [];
+        }
         historyDialogTitle.value = `会话记录: ${targetSessionId}`;
         historyDialogVisible.value = true;
         sessionsDialogVisible.value = false;
@@ -516,36 +627,113 @@ export default {
     };
 
     onMounted(() => {
+      let integrityCheck; // 提前声明变量
+      console.log('应用启动，开始数据完整性检查...');
+      
+      // 初始化时确保所有响应式数据都有默认值
+      if (!currentUser.value) {
+        currentUser.value = { id: 0, username: '', email: '' };
+      }
+      
       // 检查本地存储的token
       const savedToken = localStorage.getItem('authToken');
       const savedUser = localStorage.getItem('currentUser');
       const savedSessionId = localStorage.getItem('sessionId');
       
-      if (savedToken && savedUser) {
-        token.value = savedToken;
-        currentUser.value = JSON.parse(savedUser);
-        isLoggedIn.value = true;
-        axios.defaults.headers.common['Authorization'] = `Bearer ${savedToken}`;
-        
-        // 如果存在保存的sessionId，则使用它，否则生成新的
-        if (savedSessionId) {
-          sessionId.value = savedSessionId;
-          console.log('恢复之前的会话: ' + savedSessionId);
-        } else {
-          sessionId.value = "user-" + currentUser.value.id + "-session-" + Date.now();
-          localStorage.setItem('sessionId', sessionId.value);
+      console.log('尝试从localStorage恢复数据:', {
+        hasToken: !!savedToken,
+        hasUser: !!savedUser,
+        hasSessionId: !!savedSessionId
+      });
+      
+      // 定期检查数据完整性
+      integrityCheck = setInterval(() => {
+        try {
+          // 检查用户数据完整性
+          if (isLoggedIn.value && (!currentUser.value || !currentUser.value.id)) {
+            console.warn('检测到用户数据不完整，尝试重新初始化');
+            handleLogout();
+          }
+          
+          // 检查localStorage数据完整性
+          const token = localStorage.getItem('authToken');
+          const user = localStorage.getItem('currentUser');
+          
+          if (token && !user) {
+            console.warn('检测到localStorage数据不一致：有token但没有用户信息');
+          }
+        } catch (error) {
+          console.error('数据完整性检查失败:', error);
         }
-        
-        getBookings();
+      }, 30000); // 每30秒检查一次
+      
+      // 在组件卸载时清理定时器
+      onUnmounted(() => {
+        clearInterval(integrityCheck);
+      });
+      
+      if (savedToken && savedUser) {
+        try {
+          token.value = savedToken;
+          const parsedUser = JSON.parse(savedUser);
+          
+          // 验证解析后的用户对象是否有效
+          if (parsedUser && parsedUser.id && parsedUser.username) {
+            currentUser.value = parsedUser;
+            
+            // 添加调试信息 - 确保currentUser.value存在
+        if (currentUser.value && currentUser.value.id) {
+          console.log('从localStorage恢复的用户ID:', currentUser.value.id);
+          console.log('从localStorage恢复的用户名:', currentUser.value.username);
+        }
+            
+            isLoggedIn.value = true;
+            axios.defaults.headers.common['Authorization'] = `Bearer ${savedToken}`;
+            
+            // 如果存在保存的sessionId，则使用它，否则生成新的
+            if (savedSessionId) {
+              sessionId.value = savedSessionId;
+              if (savedSessionId) {
+          console.log('恢复之前的会话: ' + savedSessionId);
+        }
+            } else {
+              sessionId.value = "user-" + currentUser.value.id + "-session-" + Date.now();
+              localStorage.setItem('sessionId', sessionId.value);
+            }
+            
+            getBookings();
+          } else {
+            console.warn('localStorage中的用户信息格式不正确，清理数据');
+            localStorage.removeItem('authToken');
+            localStorage.removeItem('currentUser');
+            localStorage.removeItem('sessionId');
+          }
+        } catch (error) {
+          console.error('解析localStorage用户数据失败:', error);
+          // 清理损坏的数据
+          localStorage.removeItem('authToken');
+          localStorage.removeItem('currentUser');
+          localStorage.removeItem('sessionId');
+        }
       }
     });
 
     // 监听登录状态变化，保存到本地存储
     const unwatch = watch(isLoggedIn, (newVal) => {
       if (newVal) {
-        localStorage.setItem('authToken', token.value);
-        localStorage.setItem('currentUser', JSON.stringify(currentUser.value));
-        localStorage.setItem('sessionId', sessionId.value);
+        // 确保currentUser.value存在且有有效属性
+        if (currentUser.value && currentUser.value.id && currentUser.value.username) {
+          localStorage.setItem('authToken', token.value);
+          localStorage.setItem('currentUser', JSON.stringify(currentUser.value));
+          localStorage.setItem('sessionId', sessionId.value);
+          
+          // 添加调试信息 - 确保currentUser.value存在
+        if (currentUser.value && currentUser.value.id) {
+          console.log('保存到localStorage的用户ID:', currentUser.value.id);
+        }
+        } else {
+          console.warn('用户信息不完整，不保存到localStorage');
+        }
       } else {
         localStorage.removeItem('authToken');
         localStorage.removeItem('currentUser');
@@ -555,8 +743,12 @@ export default {
 
     // 监听sessionId变化，保存到本地存储
     const unwatchSession = watch(sessionId, (newVal) => {
-      if (isLoggedIn.value && newVal) {
+      if (isLoggedIn.value && newVal && currentUser.value && currentUser.value.id) {
         localStorage.setItem('sessionId', newVal);
+        // 添加调试信息
+        if (newVal) {
+            console.log('保存到localStorage的sessionId:', newVal);
+          }
       }
     });
 
@@ -611,7 +803,14 @@ export default {
       formatTimestamp,
       
       // 工具
-      MoreFilled
+      MoreFilled,
+      
+      // 错误处理
+      errorHandler,
+      
+      // 数据验证
+      validateUserData,
+      validateSessionData
     };
   },
 };

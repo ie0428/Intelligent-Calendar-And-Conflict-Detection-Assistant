@@ -1,6 +1,5 @@
 package com.ai.intelligentcalendarandconflictdetectionassistant.services;
 
-import com.ai.intelligentcalendarandconflictdetectionassistant.data.BookingStatus;
 import com.ai.intelligentcalendarandconflictdetectionassistant.mapper.CalendarEventMapper;
 import com.ai.intelligentcalendarandconflictdetectionassistant.mapper.UserMapper;
 import com.ai.intelligentcalendarandconflictdetectionassistant.pojo.CalendarEvent;
@@ -97,6 +96,9 @@ public class FlightBookingService {
 		event.setEndTime(newLocalDate.atTime(23, 59));
 		event.setLocation(location);
 		event.setDescription(description);
+		
+		// 更新状态为NOT_STARTED（未开始）
+		event.setStatus(CalendarEvent.Status.NOT_STARTED);
 
 		// 设置更新时间
 		event.setUpdatedAt(LocalDateTime.now());
@@ -123,7 +125,7 @@ public class FlightBookingService {
 				String.valueOf(event.getId()),
 				user.getUsername() != null ? user.getUsername() : "Unknown User",
 				event.getStartTime().toLocalDate(),
-				BookingStatus.valueOf(event.getStatus().name()),
+				event.getStatus().name(),
 				event.getLocation() != null ? event.getLocation() : "Unknown Location",
 				event.getDescription() != null ? event.getDescription() : "No Description",
 				event.getEventType() != null ? event.getEventType().name() : "MEETING",
@@ -153,8 +155,11 @@ public class FlightBookingService {
 		event.setEndTime(localDate.atTime(23, 59));
 		event.setLocation(location);
 		event.setDescription(description);
-		event.setStatus(CalendarEvent.Status.TENTATIVE);
+		event.setStatus(CalendarEvent.Status.NOT_STARTED); // 默认状态为未开始
 		event.setEventType(CalendarEvent.EventType.MEETING);
+		event.setPriority(CalendarEvent.Priority.MEDIUM); // 默认优先级
+		event.setAllDay(false); // 默认非全天事件
+		event.setVisibility(CalendarEvent.Visibility.PRIVATE); // 默认私有可见性
 		// 设置时区
 		if (timezone != null && !timezone.trim().isEmpty()) {
 			event.setTimezone(timezone);

@@ -4,6 +4,7 @@ import com.ai.intelligentcalendarandconflictdetectionassistant.pojo.Conversation
 import com.ai.intelligentcalendarandconflictdetectionassistant.pojo.User;
 import com.ai.intelligentcalendarandconflictdetectionassistant.services.ConversationService;
 import com.ai.intelligentcalendarandconflictdetectionassistant.services.impls.UserDetailsImpl;
+import com.ai.intelligentcalendarandconflictdetectionassistant.services.UserContextHolder;
 import org.springframework.ai.chat.client.AdvisedRequest;
 import org.springframework.ai.chat.client.RequestResponseAdvisor;
 import org.springframework.ai.chat.model.ChatResponse;
@@ -387,6 +388,14 @@ public class DatabaseChatMemoryAdvisor implements RequestResponseAdvisor {
      * @return 当前用户ID，如果无法获取则返回null
      */
     private Long getCurrentUserIdFromContext(Map<String, Object> context) {
+        // 首先尝试从ThreadLocal获取用户ID（来自AI调用链）
+        Long threadLocalUserId = UserContextHolder.getCurrentUserId();
+        if (threadLocalUserId != null) {
+            System.out.println("从ThreadLocal获取到用户ID: " + threadLocalUserId);
+            return threadLocalUserId;
+        }
+        
+        // 其次尝试从SecurityContext获取用户ID（来自HTTP请求）
         try {
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
             if (authentication != null && authentication.isAuthenticated() && 
