@@ -2,7 +2,7 @@ package com.ai.intelligentcalendarandconflictdetectionassistant.services;
 
 import com.ai.intelligentcalendarandconflictdetectionassistant.mapper.ConversationMapper;
 import com.ai.intelligentcalendarandconflictdetectionassistant.pojo.Conversation;
-import com.ai.intelligentcalendarandconflictdetectionassistant.pojo.User;
+import com.ai.intelligentcalendarandconflictdetectionassistant.pojo.SessionSummary;
 import com.ai.intelligentcalendarandconflictdetectionassistant.services.impls.UserDetailsImpl;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.Authentication;
@@ -134,7 +134,7 @@ public class ConversationService {
     public void deleteConversation(Long id) {
         conversationMapper.deleteById(id);
     }
-    
+
     /**
      * 获取用户的所有会话ID列表
      * @param userId 用户ID
@@ -142,6 +142,146 @@ public class ConversationService {
      */
     public List<String> getAllSessionIdsByUser(Long userId) {
         return conversationMapper.findDistinctSessionIdsByUserId(userId);
+    }
+
+    /**
+     * 获取用户的会话总结列表
+     * @param userId 用户ID
+     * @return 会话总结列表
+     */
+    public List<SessionSummary> getSessionSummariesByUser(Long userId) {
+        List<String> sessionIds = conversationMapper.findDistinctSessionIdsByUserId(userId);
+        List<SessionSummary> summaries = new ArrayList<>();
+
+        for (String sessionId : sessionIds) {
+            List<Conversation> conversations = conversationMapper.findBySessionIdOrderByCreatedAtDesc(sessionId);
+            if (conversations != null && !conversations.isEmpty()) {
+                SessionSummary summary = new SessionSummary();
+                summary.setSessionId(sessionId);
+                summary.setConversationCount(conversations.size());
+
+                // 获取最后活动时间
+                Conversation lastConversation = conversations.get(0);
+                summary.setLastActivityTime(lastConversation.getCreatedAt().toString());
+
+                // 生成会话总结
+                String summaryText = generateSessionSummary(conversations);
+                summary.setSummary(summaryText);
+
+                summaries.add(summary);
+            }
+        }
+
+        return summaries;
+    }
+
+    /**
+     * 生成会话总结
+     * @param conversations 会话中的对话列表
+     * @return 会话总结
+     */
+    private String generateSessionSummary(List<Conversation> conversations) {
+        if (conversations == null || conversations.isEmpty()) {
+            return "无对话内容";
+        }
+
+        // 获取第一条和最后一条对话
+        Conversation firstConversation = conversations.get(conversations.size() - 1);
+        Conversation lastConversation = conversations.get(0);
+
+        StringBuilder summary = new StringBuilder();
+        summary.append("包含 ").append(conversations.size()).append(" 条对话");
+
+        if (lastConversation.getIntent() != null && !lastConversation.getIntent().isEmpty()) {
+            summary.append("，主要讨论：").append(lastConversation.getIntent());
+        }
+
+        // 如果第一条对话有内容，添加到总结中
+        if (firstConversation.getUserMessage() != null && !firstConversation.getUserMessage().isEmpty()) {
+            String firstMessage = firstConversation.getUserMessage();
+            if (firstMessage.length() > 20) {
+                firstMessage = firstMessage.substring(0, 20) + "...";
+            }
+            summary.append("，开始于：").append(firstMessage);
+        }
+
+        return summary.toString();
+    }
+
+    /**
+     * 创建新对话会话
+     * @param userId 用户ID
+     * @param customSessionId 自定义会话ID（可选）
+     * @return 新创建的会话ID
+     */
+    public String createNewConversation(Long userId, String customSessionId) {
+        // 验证用户ID
+        if (userId == null || userId <= 0) {
+            throw new IllegalArgumentException("无效的用户ID");
+        }
+
+        // 生成会话ID
+        String sessionId;
+        if (customSessionId != null && !customSessionId.trim().isEmpty()) {
+            sessionId = customSessionId;
+        } else {
+            sessionId = "user-" + userId + "-session-" + System.currentTimeMillis();
+        }
+
+        // 创建欢迎消息作为新对话的开始
+        String welcomeMessage = "欢迎使用智能日程助手！请问有什么可以帮您的？";
+        
+        // 保存欢迎消息到数据库
+        Conversation welcomeConversation = new Conversation();
+        welcomeConversation.setUserId(userId);
+        welcomeConversation.setSessionId(sessionId);
+        welcomeConversation.setUserMessage("开始新对话");
+        welcomeConversation.setAiResponse(welcomeMessage);
+        welcomeConversation.setIntent("welcome");
+        welcomeConversation.setEntities("{}");
+        welcomeConversation.setSuccessful(true);
+        welcomeConversation.setCreatedAt(LocalDateTime.now());
+
+        conversationMapper.insert(welcomeConversation);
+
+        System.out.println("创建新对话会话 - 用户ID: " + userId + ", 会话ID: " + sessionId);
+        
+        return sessionId;
+    }
+
+    /**
+     * 获取用户最近的活动会话ID
+     * @param userId 用户ID
+     * @return 最近的活动会话ID，如果没有则返回null
+     */
+    public String getRecentActiveSessionId(Long userId) {
+        return conversationMapper.findLatestSessionIdByUserId(userId);
+    }
+
+    /**
+     * 检查会话是否存在
+     * @param sessionId 会话ID
+     * @return 是否存在
+     */
+    public boolean sessionExists(String sessionId) {
+        if (sessionId == null || sessionId.trim().isEmpty()) {
+            return false;
+        }
+        
+        return conversationMapper.existsBySessionId(sessionId);
+    }
+
+    /**
+     * 获取会话中的对话数量
+     * @param sessionId 会话ID
+     * @return 对话数量
+     */
+    public int getConversationCount(String sessionId) {
+        if (sessionId == null || sessionId.trim().isEmpty()) {
+            return 0;
+        }
+        
+        return conversationMapper.countBySessionId(sessionId);
     }
 
 }

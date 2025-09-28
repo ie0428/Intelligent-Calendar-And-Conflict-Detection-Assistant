@@ -126,9 +126,14 @@
               <template #header>
                 <div class="chat-header">
                   <span>智能对话助手</span>
-                  <el-button @click="loadHistory" type="primary" size="small">
-                    当前会话记录
-                  </el-button>
+                  <div style="display: flex; gap: 10px;">
+                    <el-button @click="createNewConversation" type="success" size="small">
+                      新建对话
+                    </el-button>
+                    <el-button @click="loadHistory" type="primary" size="small">
+                      当前会话记录
+                    </el-button>
+                  </div>
                 </div>
               </template>
               
@@ -203,10 +208,16 @@
     <el-dialog
         v-model="sessionsDialogVisible"
         title="我的所有会话"
-        width="50%"
+        width="70%"
     >
       <el-table :data="userSessions" stripe>
-        <el-table-column prop="sessionId" label="会话ID" />
+        <el-table-column prop="summary" label="会话内容总结" width="300" />
+        <el-table-column prop="conversationCount" label="对话数量" width="100" />
+        <el-table-column prop="lastActivityTime" label="最后活动时间" width="180">
+          <template #default="scope">
+            {{ formatTimestamp(scope.row.lastActivityTime) }}
+          </template>
+        </el-table-column>
         <el-table-column label="操作" width="120">
           <template #default="scope">
             <el-button 
@@ -579,10 +590,10 @@ export default {
 
     const showUserSessions = async () => {
       try {
-        const response = await axios.get(`/api/conversations/sessions/current`);
+        const response = await axios.get(`/api/conversations/sessions/summaries/current`);
         // 确保response.data存在且是数组
         if (response && response.data && Array.isArray(response.data)) {
-          userSessions.value = response.data.map(sessionId => ({ sessionId }));
+          userSessions.value = response.data;
         } else {
           console.warn('获取到的会话数据格式不正确:', response);
           userSessions.value = [];
@@ -637,6 +648,43 @@ export default {
       } catch (error) {
         console.error('获取指定会话记录失败:', error);
         ElMessage.error('获取会话记录失败');
+      }
+    };
+
+    const createNewConversation = async () => {
+      try {
+        // 确认用户是否要开始新对话
+        await ElMessageBox.confirm(
+          '确定要开始新的对话吗？当前对话记录将被保存，但会开启一个新的对话会话。',
+          '新建对话',
+          { type: 'warning' }
+        );
+        
+        // 调用后端API创建新对话
+        const response = await axios.post('/api/conversations/new');
+        const newSessionId = response.data;
+        
+        // 更新当前sessionId
+        sessionId.value = newSessionId;
+        
+        // 清空当前对话记录
+        activities.value = [{
+          content: "⭐欢迎使用智能日程助手！请问有什么可以帮您的?",
+          timestamp: new Date().toLocaleString(),
+          color: "#0bbd87",
+        }];
+        
+        // 重置消息计数
+        count = 2;
+        
+        ElMessage.success('已创建新对话会话');
+        console.log('新对话会话ID:', newSessionId);
+        
+      } catch (error) {
+        if (error !== 'cancel') {
+          console.error('创建新对话失败:', error);
+          ElMessage.error('创建新对话失败');
+        }
       }
     };
 
@@ -836,6 +884,7 @@ export default {
       showUserSessions,
       showAllConversations,
       loadSessionConversations,
+      createNewConversation,
       handleHistoryDialogClose,
       formatTimestamp,
       
