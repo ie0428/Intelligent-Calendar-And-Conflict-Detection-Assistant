@@ -53,12 +53,15 @@ public class OpenAiController {
                         6. 用户不需要提供姓名，系统会自动使用当前登录用户的身份信息
                         7. 当用户询问日程时，直接告诉用户他的日程信息，不需要再询问姓名
                         8. 所有日程操作现在都基于用户ID进行，确保数据安全性和准确性
+                        9. 当用户要求删除日程时，这将完全从数据库中移除记录，而不仅仅是更改状态
+                        10. 取消操作会保留日程记录但将其状态设置为已取消，而删除操作会完全移除日程记录
+                        
                         请讲中文。
                         今天的日期是 %s.
                     """.formatted(currentDate))
                 .defaultAdvisors(new loggingAdvisor())
                 .defaultAdvisors(new DatabaseChatMemoryAdvisor(conversationService))
-                .defaultFunctions("cancelBooking","getBookingDetails","createBooking","changeBooking","findCalendarEvent","getAllBookings")
+                .defaultFunctions("cancelBooking","getBookingDetails","createBooking","changeBooking","findCalendarEvent","getAllBookings","getSmartScheduleSuggestions","deleteBooking")
                 .build();
     }
     @CrossOrigin

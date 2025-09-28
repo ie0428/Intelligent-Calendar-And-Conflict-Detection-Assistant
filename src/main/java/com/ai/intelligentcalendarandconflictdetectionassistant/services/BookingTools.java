@@ -95,6 +95,33 @@ public class BookingTools {
 		};
 	}
 
+	public record DeleteBookingRequest(String eventId, Long userId) {
+	}
+
+	@Bean
+	@Description("删除日程")
+	public Function<DeleteBookingRequest, String> deleteBooking() {
+		return request -> {
+			try {
+				log.info("开始删除日程，事件ID: {}", request.eventId());
+				
+				Long userId = getCurrentUserId();
+				if (userId == null) {
+					userId = request.userId();
+					log.warn("无法从认证上下文获取用户ID，使用请求参数中的用户ID: {}", userId);
+				} else {
+					log.info("成功获取当前用户ID: {}", userId);
+				}
+				
+				log.info("调用FlightBookingService删除日程，用户ID: {}, 事件ID: {}", userId, request.eventId());
+				flightBookingService.deleteBookingByUserId(request.eventId(), userId);
+				return "日程删除成功";
+			} catch (Exception e) {
+				return "日程删除失败: " + e.getMessage();
+			}
+		};
+	}
+
 	public record FindCalendarEventRequest(String eventId, Long userId) {
 		// 添加默认构造函数支持只传userId
 		public FindCalendarEventRequest(Long userId) {

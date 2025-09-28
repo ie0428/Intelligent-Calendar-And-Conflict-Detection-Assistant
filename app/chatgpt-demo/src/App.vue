@@ -54,8 +54,8 @@
             <el-button @click="showUserSessions" type="primary" size="small">
               查看所有会话
             </el-button>
-            <el-button @click="showAllConversations" type="info" size="small">
-              所有对话记录
+            <el-button @click="showDashboard" type="success" size="small">
+              数据仪表盘
             </el-button>
             <span class="welcome-text">欢迎, {{ currentUser.username }}</span>
             <el-button @click="handleLogout" type="danger" size="small">退出</el-button>
@@ -225,6 +225,24 @@
         </span>
       </template>
     </el-dialog>
+
+    <!-- Dashboard弹窗 -->
+    <el-dialog
+        v-model="dashboardVisible"
+        title="数据仪表盘"
+        width="90%"
+        :before-close="closeDashboard"
+    >
+      <Dashboard 
+        :events="tableData" 
+        @close="closeDashboard"
+      />
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="closeDashboard">关闭</el-button>
+        </span>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -235,12 +253,14 @@ import axios from "axios";
 import { ElMessage, ElMessageBox } from "element-plus";
 import CalendarView from "./components/CalendarView.vue";
 import ConflictDetection from "./components/ConflictDetection.vue";
+import Dashboard from "./components/Dashboard.vue";
 
 export default {
   name: 'App',
   components: {
     CalendarView,
-    ConflictDetection
+    ConflictDetection,
+    Dashboard
   },
   setup() {
     // 添加错误边界处理
@@ -314,7 +334,7 @@ export default {
     // 聊天相关状态
     const activities = ref([
       {
-        content: "⭐欢迎使用智能日程助手！请问有什么可以帮您的?",
+        content: "⭐欢迎使用ie智能日程助手！请问有什么可以帮您的?日程相关的问题，可以直接提问我哦~",
         timestamp: new Date().toLocaleString(),
         color: "#0bbd87",
       },
@@ -328,6 +348,9 @@ export default {
     
     // 视图切换状态
     const currentView = ref('calendar'); // 'calendar' 或 'table'
+    
+    // Dashboard相关状态
+    const dashboardVisible = ref(false);
     
     // 历史记录相关
     const historyDialogVisible = ref(false);
@@ -626,6 +649,15 @@ export default {
       return new Date(timestamp).toLocaleString();
     };
 
+    // Dashboard相关方法
+    const showDashboard = () => {
+      dashboardVisible.value = true;
+    };
+
+    const closeDashboard = () => {
+      dashboardVisible.value = false;
+    };
+
     onMounted(() => {
       let integrityCheck; // 提前声明变量
       console.log('应用启动，开始数据完整性检查...');
@@ -788,6 +820,11 @@ export default {
       // 视图切换
       currentView,
       
+      // Dashboard相关
+      dashboardVisible,
+      showDashboard,
+      closeDashboard,
+      
       // 历史记录相关
       historyDialogVisible,
       historyDialogTitle,
@@ -850,7 +887,7 @@ export default {
 }
 
 .app-header {
-  background: linear-gradient(90deg, #409EFF 0%, #67C23A 100%);
+  background: linear-gradient(90deg, #6477f0 0%, #dbacf3 100%);
   color: white;
   padding: 0 20px;
 }
@@ -918,7 +955,7 @@ export default {
 }
 
 :deep(.el-timeline-item__node) {
-  background-color: #409EFF;
+  background-color: #83bcf6;
 }
 
 :deep(.el-timeline-item__timestamp) {

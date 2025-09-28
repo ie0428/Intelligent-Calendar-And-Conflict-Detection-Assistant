@@ -364,7 +364,7 @@ export default {
 .weekdays {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  background: linear-gradient(135deg, #1890ff 0%, #40a9ff 100%);
+  background: linear-gradient(135deg, #3999f3 0%, #8dc7f7 100%);
   width: 100%;
 }
 
@@ -457,7 +457,7 @@ export default {
   right: 16px;
   width: 8px;
   height: 8px;
-  background-color: #52c41a;
+  background-color: #78c41a;
   border-radius: 50%;
   animation: pulse 2s infinite;
 }
@@ -510,7 +510,7 @@ export default {
 .event-badge {
   font-size: 12px;
   padding: 4px 8px;
-  background-color: #1890ff;
+  background-color: #4ea6f8;
   color: white;
   border-radius: 4px;
   cursor: pointer;
@@ -522,7 +522,7 @@ export default {
 }
 
 .event-badge:hover {
-  background-color: #40a9ff;
+  background-color: #4fa8f1;
   transform: translateX(2px);
 }
 

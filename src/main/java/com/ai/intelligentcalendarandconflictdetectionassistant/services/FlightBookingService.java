@@ -115,6 +115,12 @@ public class FlightBookingService {
 		calendarEventMapper.update(event);
 	}
 
+	// 根据用户ID删除日历事件
+	public void deleteBookingByUserId(String eventId, Long userId) {
+		CalendarEvent event = findCalendarEventByUserId(Long.valueOf(eventId), userId);
+		calendarEventMapper.deleteById(event.getId());
+	}
+
 	private BookingDetails toBookingDetails(CalendarEvent event) {
 		User user = userMapper.findById(event.getUserId());
 		if (user == null) {
