@@ -40,7 +40,7 @@
             <div 
               v-for="event in day.events.slice(0, 2)" 
               :key="event.eventId"
-              :class="['event-badge', { 'cancelled': event.bookingStatus === 'CANCELLED' }]"
+              :class="['event-badge', getEventStatusClass(event.status)]"
               @click.stop="showEventDetails(event)"
             >
               {{ event.title || event.name }}
@@ -211,13 +211,18 @@ export default {
     function getEventsForDate(date) {
       const dateStr = formatDateForComparison(date);
       return props.events.filter(event => {
-        const eventDate = new Date(event.date);
-        return formatDateForComparison(eventDate) === dateStr;
+        // 后端返回的event.date是LocalDate格式（如"2024-01-15"），直接比较字符串
+        const eventDateStr = event.date;
+        return eventDateStr === dateStr;
       });
     }
 
     function formatDateForComparison(date) {
-      return date.toISOString().split('T')[0];
+      // 使用本地时区的日期字符串进行比较，避免UTC转换问题
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
     }
 
     function formatDate(date) {
@@ -226,6 +231,20 @@ export default {
         month: '2-digit',
         day: '2-digit'
       });
+    }
+
+    function getEventStatusClass(status) {
+      switch (status) {
+        case 'CANCELLED':
+          return 'cancelled'; // 已取消 - 红色
+        case 'IN_PROGRESS':
+          return 'in-progress'; // 进行中 - 黄色
+        case 'COMPLETED':
+          return 'completed'; // 已完成 - 绿色
+        case 'NOT_STARTED':
+        default:
+          return 'not-started'; // 未开始 - 蓝色
+      }
     }
 
     function prevMonth() {
@@ -295,7 +314,8 @@ export default {
       isSameDay,
       editEvent,
       cancelEvent,
-      formatDate
+      formatDate,
+      getEventStatusClass
     };
   }
 };
@@ -527,9 +547,21 @@ export default {
 }
 
 .event-badge.cancelled {
-  background-color: #ff4d4f;
+  background-color: #ff4d4f; /* 红色 - 已取消 */
   text-decoration: line-through;
   opacity: 0.7;
+}
+
+.event-badge.in-progress {
+  background-color: #faad14; /* 黄色 - 进行中 */
+}
+
+.event-badge.completed {
+  background-color: #52c41a; /* 绿色 - 已完成 */
+}
+
+.event-badge.not-started {
+  background-color: #4ea6f8; /* 蓝色 - 未开始 */
 }
 
 .more-events {
