@@ -1,8 +1,7 @@
 package com.ai.intelligentcalendarandconflictdetectionassistant.langchain4j;
 
-import com.ai.intelligentcalendarandconflictdetectionassistant.services.BookingTools;
-import com.ai.intelligentcalendarandconflictdetectionassistant.services.ConversationService;
-import com.ai.intelligentcalendarandconflictdetectionassistant.services.RagService;
+import com.ai.intelligentcalendarandconflictdetectionassistant.services.impls.ConversationServiceImpl;
+import com.ai.intelligentcalendarandconflictdetectionassistant.services.impls.RagServiceImpl;
 import com.ai.intelligentcalendarandconflictdetectionassistant.services.impls.UserDetailsImpl;
 import com.ai.intelligentcalendarandconflictdetectionassistant.services.UserContextHolder;
 import dev.langchain4j.memory.chat.MessageWindowChatMemory;
@@ -35,24 +34,24 @@ import java.util.UUID;
  */
 @RestController
 @CrossOrigin
-public class langchan4jController {
+public class Langchain4jController {
     private final ChatLanguageModel chatModel;
     private final LangChainBookingTools bookingTools;
-    private final RagService ragService;
+    private final RagServiceImpl ragService;
     private final VectorStore vectorStore;
-    private final ConversationService conversationService;
+    private final ConversationServiceImpl conversationServiceImpl;
 
     // 配置LangChain4j AI服务
-    public langchan4jController(ChatLanguageModel chatModel,
-                                LangChainBookingTools bookingTools,
-                                RagService ragService,
-                                VectorStore vectorStore,
-                                ConversationService conversationService) {
+    public Langchain4jController(ChatLanguageModel chatModel,
+                                 LangChainBookingTools bookingTools,
+                                 RagServiceImpl ragService,
+                                 VectorStore vectorStore,
+                                 ConversationServiceImpl conversationServiceImpl) {
         this.chatModel = chatModel;
         this.bookingTools = bookingTools;
         this.ragService = ragService;
         this.vectorStore = vectorStore;
-        this.conversationService = conversationService;
+        this.conversationServiceImpl = conversationServiceImpl;
     }
 
     // 定义AI服务接口 - 使用LangChain4j的现代特性
@@ -188,7 +187,7 @@ public class langchan4jController {
             
             // 保存对话记录到数据库
             try {
-                conversationService.saveConversation(
+                conversationServiceImpl.saveConversation(
                     finalCurrentUserId, 
                     finalSessionId, 
                     message, 
@@ -218,7 +217,7 @@ public class langchan4jController {
             
             // 保存错误对话记录
             try {
-                conversationService.saveConversation(
+                conversationServiceImpl.saveConversation(
                     finalCurrentUserId, 
                     finalSessionId, 
                     message, 

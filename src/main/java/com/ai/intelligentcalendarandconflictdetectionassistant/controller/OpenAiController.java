@@ -1,9 +1,9 @@
 package com.ai.intelligentcalendarandconflictdetectionassistant.controller;
 
 import com.ai.intelligentcalendarandconflictdetectionassistant.advisor.DatabaseChatMemoryAdvisor;
-import com.ai.intelligentcalendarandconflictdetectionassistant.advisor.loggingAdvisor;
-import com.ai.intelligentcalendarandconflictdetectionassistant.services.ConversationService;
-import com.ai.intelligentcalendarandconflictdetectionassistant.services.RagService;
+import com.ai.intelligentcalendarandconflictdetectionassistant.advisor.LoggingAdvisor;
+import com.ai.intelligentcalendarandconflictdetectionassistant.services.impls.ConversationServiceImpl;
+import com.ai.intelligentcalendarandconflictdetectionassistant.services.impls.RagServiceImpl;
 import com.ai.intelligentcalendarandconflictdetectionassistant.services.impls.UserDetailsImpl;
 import com.ai.intelligentcalendarandconflictdetectionassistant.services.UserContextHolder;
 import com.ai.intelligentcalendarandconflictdetectionassistant.services.BookingTools;
@@ -18,12 +18,10 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.multipart.MultipartFile;
 import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
+
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -38,14 +36,14 @@ import java.util.List;
 @CrossOrigin
 public class OpenAiController {
     private final ChatClient chatClient;
-    private final RagService ragService;
+    private final RagServiceImpl ragService;
     private final VectorStore vectorStore;
 
     // 配置ChatClient
     public OpenAiController(ChatClient.Builder chatClientBuilder,
                             ChatMemory chatMemory,
-                            ConversationService conversationService,
-                            RagService ragService,
+                            ConversationServiceImpl conversationServiceImpl,
+                            RagServiceImpl ragService,
                             VectorStore vectorStore) {
         // 获取当前日期并格式化
         String currentDate = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
@@ -70,8 +68,8 @@ public class OpenAiController {
                         请讲中文。
                         今天的日期是 %s.
                     """.formatted(currentDate))
-                .defaultAdvisors(new loggingAdvisor())
-                .defaultAdvisors(new DatabaseChatMemoryAdvisor(conversationService))
+                .defaultAdvisors(new LoggingAdvisor())
+                .defaultAdvisors(new DatabaseChatMemoryAdvisor(conversationServiceImpl))
                 .defaultFunctions("cancelBooking","getBookingDetails","createBooking","changeBooking","findCalendarEvent","getAllBookings","getSmartScheduleSuggestions","deleteBooking")
                 .build();
         

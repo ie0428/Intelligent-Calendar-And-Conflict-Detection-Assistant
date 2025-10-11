@@ -1,11 +1,11 @@
 package com.ai.intelligentcalendarandconflictdetectionassistant.langchain4j;
 
-import com.ai.intelligentcalendarandconflictdetectionassistant.services.ConflictDetectionService;
-import com.ai.intelligentcalendarandconflictdetectionassistant.services.FlightBookingService;
+import com.ai.intelligentcalendarandconflictdetectionassistant.services.impls.ConflictDetectionServiceImpl;
+import com.ai.intelligentcalendarandconflictdetectionassistant.services.impls.FlightBookingServiceImpl;
 import dev.langchain4j.agent.tool.Tool;
 import dev.langchain4j.agent.tool.P;
-import com.ai.intelligentcalendarandconflictdetectionassistant.pojo.request.ConflictCheckRequest;
-import com.ai.intelligentcalendarandconflictdetectionassistant.pojo.response.ConflictCheckResponse;
+import com.ai.intelligentcalendarandconflictdetectionassistant.request.ConflictCheckRequest;
+import com.ai.intelligentcalendarandconflictdetectionassistant.response.ConflictCheckResponse;
 import com.ai.intelligentcalendarandconflictdetectionassistant.pojo.TimeSuggestion;
 import com.ai.intelligentcalendarandconflictdetectionassistant.services.BookingTools.BookingDetails;
 import lombok.extern.slf4j.Slf4j;
@@ -25,10 +25,10 @@ import java.util.List;
 public class LangChainBookingTools {
 
     @Autowired
-    private FlightBookingService flightBookingService;
+    private FlightBookingServiceImpl flightBookingServiceImpl;
 
     @Autowired
-    private ConflictDetectionService conflictDetectionService;
+    private ConflictDetectionServiceImpl conflictDetectionServiceImpl;
 
     /**
      * 创建新的日程安排
@@ -70,7 +70,7 @@ public class LangChainBookingTools {
                 conflictRequest.setEndTime(LocalTime.parse(endTime));
                 conflictRequest.setLocation(location);
                 conflictRequest.setDescription(description);
-                ConflictCheckResponse conflictResponse = conflictDetectionService.checkConflict(conflictRequest, userId);
+                ConflictCheckResponse conflictResponse = conflictDetectionServiceImpl.checkConflict(conflictRequest, userId);
 
                 if (conflictResponse.isHasConflict()) {
                     log.warn("检测到冲突，冲突数量: {}, 严重程度: {}",
@@ -96,7 +96,7 @@ public class LangChainBookingTools {
                 log.error("冲突检测失败，继续创建日程: {}", e.getMessage(), e);
             }
 
-            flightBookingService.createBooking(date, location, description, title, userId, "UTC");
+            flightBookingServiceImpl.createBooking(date, location, description, title, userId, "UTC");
             log.info("日程创建成功");
             return "日程创建成功";
         } catch (Exception e) {
@@ -124,7 +124,7 @@ public class LangChainBookingTools {
 
             // 目前只支持查询所有日程，后续可以添加按日期查询功能
             log.info("查询所有日程，用户ID: {}", userId);
-            return flightBookingService.getBookingsByUserId(userId);
+            return flightBookingServiceImpl.getBookingsByUserId(userId);
         } catch (Exception e) {
             log.error("查询用户日程失败: {}", e.getMessage());
             return List.of();
@@ -148,7 +148,7 @@ public class LangChainBookingTools {
                 log.warn("无法获取用户ID，使用默认用户ID: {}", userId);
             }
 
-            flightBookingService.cancelBookingByUserId(eventId, userId);
+            flightBookingServiceImpl.cancelBookingByUserId(eventId, userId);
             log.info("日程取消成功");
             return "日程取消成功";
         } catch (Exception e) {
@@ -187,7 +187,7 @@ public class LangChainBookingTools {
                 conflictRequest.setEndTime(LocalTime.of(17, 0)); // 默认结束时间
                 conflictRequest.setLocation(location);
                 conflictRequest.setDescription(description);
-                ConflictCheckResponse conflictResponse = conflictDetectionService.checkConflict(conflictRequest, userId);
+                ConflictCheckResponse conflictResponse = conflictDetectionServiceImpl.checkConflict(conflictRequest, userId);
 
                 if (conflictResponse.isHasConflict()) {
                     log.warn("检测到冲突，冲突数量: {}, 严重程度: {}",
@@ -213,7 +213,7 @@ public class LangChainBookingTools {
                 log.error("冲突检测失败，继续修改日程: {}", e.getMessage(), e);
             }
 
-            flightBookingService.changeBookingByUserId(eventId, userId, date, location, description);
+            flightBookingServiceImpl.changeBookingByUserId(eventId, userId, date, location, description);
             log.info("日程修改成功");
             return "日程修改成功";
         } catch (Exception e) {
@@ -256,7 +256,7 @@ public class LangChainBookingTools {
             conflictRequest.setLocation(location);
             conflictRequest.setDescription("冲突检测");
 
-            ConflictCheckResponse conflictResponse = conflictDetectionService.checkConflict(conflictRequest, userId);
+            ConflictCheckResponse conflictResponse = conflictDetectionServiceImpl.checkConflict(conflictRequest, userId);
 
             if (conflictResponse.isHasConflict()) {
                 String conflictMessage = String.format("检测到%d个冲突事件，严重程度: %s。",

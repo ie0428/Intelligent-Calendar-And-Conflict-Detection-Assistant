@@ -1,6 +1,6 @@
 package com.ai.intelligentcalendarandconflictdetectionassistant.controller;
 
-import com.ai.intelligentcalendarandconflictdetectionassistant.services.RagService;
+import com.ai.intelligentcalendarandconflictdetectionassistant.services.impls.RagServiceImpl;
 import lombok.AllArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -15,7 +15,7 @@ import org.springframework.web.multipart.MultipartFile;
 @AllArgsConstructor
 public class DocumentController {
 
-    private final RagService ragService;
+    private final RagServiceImpl ragService;
 
     /**
      * 嵌入文件到向量数据库

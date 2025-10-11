@@ -1,23 +1,13 @@
 package com.ai.intelligentcalendarandconflictdetectionassistant.langchain4j;
 
-import com.ai.intelligentcalendarandconflictdetectionassistant.langchain4j.*;
-import com.ai.intelligentcalendarandconflictdetectionassistant.services.BookingTools;
-import com.ai.intelligentcalendarandconflictdetectionassistant.services.ConversationService;
+import com.ai.intelligentcalendarandconflictdetectionassistant.services.impls.ConversationServiceImpl;
 import com.ai.intelligentcalendarandconflictdetectionassistant.services.impls.UserDetailsImpl;
 import com.ai.intelligentcalendarandconflictdetectionassistant.services.UserContextHolder;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import dev.langchain4j.service.AiServices;
-import dev.langchain4j.service.SystemMessage;
 import dev.langchain4j.service.UserMessage;
 import dev.langchain4j.service.MemoryId;
-import dev.langchain4j.service.TokenStream;
 import dev.langchain4j.memory.ChatMemory;
-import dev.langchain4j.data.message.AiMessage;
-import dev.langchain4j.data.message.ToolExecutionResultMessage;
-import dev.langchain4j.model.output.Response;
-import dev.langchain4j.model.output.TokenUsage;
-import org.springframework.ai.document.Document;
-import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -28,12 +18,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
-import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
-import java.util.List;
-import java.util.ArrayList;
-import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * 增强的AI控制器，整合RAG、对话记忆管理和提示工程
@@ -47,20 +31,20 @@ public class EnhancedAIController {
     private final EnhancedRAGService enhancedRAGService;
     private final EnhancedChatMemoryService chatMemoryService;
     private final PromptEngineeringService promptService;
-    private final ConversationService conversationService;
+    private final ConversationServiceImpl conversationServiceImpl;
 
     public EnhancedAIController(ChatLanguageModel chatModel,
                                LangChainBookingTools bookingTools,
                                EnhancedRAGService enhancedRAGService,
                                EnhancedChatMemoryService chatMemoryService,
                                PromptEngineeringService promptService,
-                               ConversationService conversationService) {
+                               ConversationServiceImpl conversationServiceImpl) {
         this.chatModel = chatModel;
         this.bookingTools = bookingTools;
         this.enhancedRAGService = enhancedRAGService;
         this.chatMemoryService = chatMemoryService;
         this.promptService = promptService;
-        this.conversationService = conversationService;
+        this.conversationServiceImpl = conversationServiceImpl;
     }
 
     // 定义增强的AI服务接口
